@@ -16,6 +16,7 @@ package controller
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	claimsutil "github.com/labring/sealos/controllers/license/internal/util/claims"
@@ -56,6 +57,11 @@ func (l *LicenseActivator) Recharge(license *licensev1.License) error {
 		return err
 	}
 	owner := GetNameByNameSpace(license.Namespace)
+
+	if owner == "admin" {
+		logger.Info("recharge account", "crName", owner, "amount", math.MaxInt64)
+		return l.accountDB.AddBalance(&types2.UserQueryOpts{Owner: owner}, math.MaxInt64)
+	}
 
 	logger.Info("recharge account", "crName", owner, "amount", data.Amount)
 
