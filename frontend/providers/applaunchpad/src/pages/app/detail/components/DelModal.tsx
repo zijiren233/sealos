@@ -53,7 +53,7 @@ const DelModal = ({
   }, [appName, toast, t, onSuccess, onClose]);
 
   return (
-    <Modal isOpen onClose={onClose}>
+    <Modal isOpen onClose={onClose} lockFocusAcrossFrames={false}>
       <ModalOverlay />
       <ModalContent>
         <ModalHeader>{t('Deletion warning')} </ModalHeader>
@@ -61,7 +61,7 @@ const DelModal = ({
         <ModalBody>
           <Box color={'myGray.600'}>
             {t(
-              'Are you sure you want to delete this application? If you proceed, all data for this project will be deleted.'
+              'Are you sure you want to delete this application? If you proceed, all data for this project will be deleted'
             )}
             <Box my={3}>
               {t('Please enter')}{' '}
@@ -73,7 +73,7 @@ const DelModal = ({
           </Box>
 
           <Input
-            placeholder={`请输入：${appName}`}
+            placeholder={t('please enter app name', { appName }) || ''}
             value={inputValue}
             bg={'myWhite.300'}
             onChange={(e) => setInputValue(e.target.value)}

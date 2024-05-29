@@ -21,10 +21,20 @@ interface Props extends ButtonProps {
     value: string;
   }[];
   onchange?: (val: string) => void;
+  isInvalid?: boolean;
 }
 
 const MySelect = (
-  { placeholder, value, width = 'auto', height = '30px', list, onchange, ...props }: Props,
+  {
+    placeholder,
+    value,
+    width = 'auto',
+    height = '30px',
+    list,
+    onchange,
+    isInvalid,
+    ...props
+  }: Props,
   selectRef: any
 ) => {
   const ref = useRef<HTMLButtonElement>(null);
@@ -70,12 +80,13 @@ const MySelect = (
           }}
           {...(isOpen
             ? {
-                // boxShadow: '0px 0px 0px 2.4px rgba(33, 155, 244, 0.15)',
-                borderColor: 'brightBlue.600',
+                boxShadow: '0px 0px 0px 2.4px rgba(33, 155, 244, 0.15)',
+                borderColor: 'brightBlue.500',
                 bg: '#FFF'
               }
             : {
-                bg: '#F7F8FA'
+                bg: '#F7F8FA',
+                borderColor: isInvalid ? 'red' : ''
               })}
           {...props}
         >
@@ -111,6 +122,8 @@ const MySelect = (
           }
           zIndex={99}
           transform={'translateY(40px) !important'}
+          overflow={'overlay'}
+          maxH={'300px'}
         >
           {list.map((item) => (
             <MenuItem

@@ -84,7 +84,7 @@ export const sendToBot = async ({
             ...billings.map((item) => [
               {
                 tag: 'text',
-                text: `订单号: ${item.order_id}, 创建时间: ${item.createdTime}, 金额: ￥${item.amount}`
+                text: `订单号: ${item.order_id}, 创建时间: ${item.createdTime}, 金额: ￥${item.amount}, 可用区UID: ${item.regionUID}, 用户UID ${item.userUID}`
               }
             ])
           ]
@@ -93,7 +93,7 @@ export const sendToBot = async ({
     }
   });
   console.log(body);
-  const url = process.env.FEISHU_BOT_URL || '';
+  const url = global.AppConfig.costCenter.invoice.feiShuBotURL;
   console.log(url);
   const result = await axios.post(url, body, {
     timeout: 15000,
