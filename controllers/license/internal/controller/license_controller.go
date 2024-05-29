@@ -19,9 +19,11 @@ package controller
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	database2 "github.com/labring/sealos/controllers/pkg/database"
+	types2 "github.com/labring/sealos/controllers/pkg/types"
 
 	"github.com/go-logr/logr"
 
@@ -129,6 +131,11 @@ func (r *LicenseReconciler) reconcile(ctx context.Context, license *licensev1.Li
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager, db *database.DataBase, accountDB database2.AccountV2) error {
+	err := accountDB.AddBalance(&types2.UserQueryOpts{Owner: "admin"}, math.MaxInt32)
+	if err != nil {
+		return err
+	}
+
 	r.Logger = mgr.GetLogger().WithName("controller").WithName("License")
 	r.Client = mgr.GetClient()
 
