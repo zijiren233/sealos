@@ -22,6 +22,7 @@ import (
 	"math"
 	"time"
 
+	count "github.com/labring/sealos/controllers/pkg/account"
 	database2 "github.com/labring/sealos/controllers/pkg/database"
 	types2 "github.com/labring/sealos/controllers/pkg/types"
 
@@ -131,7 +132,7 @@ func (r *LicenseReconciler) reconcile(ctx context.Context, license *licensev1.Li
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager, db *database.DataBase, accountDB database2.AccountV2) error {
-	err := accountDB.AddBalance(&types2.UserQueryOpts{Owner: "admin"}, math.MaxInt32)
+	err := accountDB.AddBalance(&types2.UserQueryOpts{Owner: "admin"}, math.MaxInt32*count.CurrencyUnit)
 	if err != nil {
 		return err
 	}
