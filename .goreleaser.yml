@@ -11,7 +11,7 @@ project_name: sealos
 #  # Defaults to `os.Environ()`.
 #  env:
 #    - GOPROXY=https://goproxy.cn
-
+version: 2
 before:
   hooks:
     - make clean
