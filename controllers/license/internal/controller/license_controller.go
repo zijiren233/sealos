@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -31,7 +32,9 @@ import (
 
 	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	licenseutil "github.com/labring/sealos/controllers/license/internal/util/license"
+	count "github.com/labring/sealos/controllers/pkg/account"
 	database2 "github.com/labring/sealos/controllers/pkg/database"
+	types2 "github.com/labring/sealos/controllers/pkg/types"
 )
 
 // LicenseReconciler reconciles a License object
@@ -119,6 +122,11 @@ func (r *LicenseReconciler) reconcile(ctx context.Context, license *licensev1.Li
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager, accountDB database2.AccountV2) error {
+	err := accountDB.AddBalance(&types2.UserQueryOpts{Owner: "admin"}, math.MaxInt32*count.CurrencyUnit)
+	if err != nil {
+		return err
+	}
+
 	r.Logger = mgr.GetLogger().WithName("controller").WithName("License")
 	r.Client = mgr.GetClient()
 
