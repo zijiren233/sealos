@@ -3,17 +3,13 @@ import { getK8s } from '@/services/backend/kubernetes';
 import { jsonRes } from '@/services/backend/response';
 import { ApiResp } from '@/services/kubernet';
 import { TemplateType } from '@/types/app';
-import {
-  getTemplateDataSource,
-  handleTemplateToInstanceYaml,
-  getYamlTemplate,
-} from '@/utils/json-yaml';
+import { getTemplateDataSource, handleTemplateToInstanceYaml } from '@/utils/json-yaml';
 import fs from 'fs';
-import JsYaml from 'js-yaml';
+import yaml from 'js-yaml';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import path from 'path';
 import { replaceRawWithCDN } from './listTemplate';
-import { getTemplateEnvs } from '@/utils/tools';
+import { EnvResponse } from '@/types';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResp>) {
   try {
@@ -30,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       console.log(error, 'Unauthorized allowed');
     }
 
-    const { code, message, dataSource, templateYaml, TemplateEnvs, appYaml } =
+    const { code, message, dataSource, templateYaml, TemplateEnvs, yamlList } =
       await GetTemplateByName({
         namespace: user_namespace,
         templateName: templateName
@@ -47,8 +43,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
           ...dataSource,
           ...TemplateEnvs
         },
-        appYaml,
-        templateYaml
+        yamlList: yamlList,
+        templateYaml: templateYaml
       }
     });
   } catch (err: any) {
@@ -70,7 +66,15 @@ export async function GetTemplateByName({
   const cdnUrl = process.env.CDN_URL;
   const targetFolder = process.env.TEMPLATE_REPO_FOLDER || 'template';
 
-  const TemplateEnvs = getTemplateEnvs(namespace)
+  const TemplateEnvs: EnvResponse = {
+    SEALOS_CLOUD_DOMAIN: process.env.SEALOS_CLOUD_DOMAIN || 'cloud.sealos.io',
+    SEALOS_CERT_SECRET_NAME: process.env.SEALOS_CERT_SECRET_NAME || 'wildcard-cert',
+    TEMPLATE_REPO_URL:
+      process.env.TEMPLATE_REPO_URL || 'https://github.com/labring-actions/templates',
+    SEALOS_NAMESPACE: namespace || '',
+    SEALOS_SERVICE_ACCOUNT: namespace.replace('ns-', ''),
+    SHOW_AUTHOR: process.env.SHOW_AUTHOR || 'false'
+  };
 
   const originalPath = process.cwd();
   const targetPath = path.resolve(originalPath, 'templates', targetFolder);
@@ -83,7 +87,10 @@ export async function GetTemplateByName({
     ? fs.readFileSync(_tempalte?.spec?.filePath, 'utf-8')
     : fs.readFileSync(`${targetPath}/${_tempalteName}`, 'utf-8');
 
-  let { appYaml, templateYaml } = getYamlTemplate(yamlString, TemplateEnvs);
+  const yamlData = yaml.loadAll(yamlString);
+  const templateYaml: TemplateType = yamlData.find(
+    (item: any) => item.kind === 'Template'
+  ) as TemplateType;
   if (!templateYaml) {
     return {
       code: 40000,
@@ -96,7 +103,8 @@ export async function GetTemplateByName({
     templateYaml.spec.icon = replaceRawWithCDN(templateYaml.spec.icon, cdnUrl);
   }
 
-  const dataSource = getTemplateDataSource(templateYaml);
+  const yamlList = yamlData.filter((item: any) => item.kind !== 'Template');
+  const dataSource = getTemplateDataSource(templateYaml, TemplateEnvs);
 
   // Convert template to instance
   const instanceName = dataSource?.defaults?.['app_name']?.value;
@@ -107,14 +115,14 @@ export async function GetTemplateByName({
     };
   }
   const instanceYaml = handleTemplateToInstanceYaml(templateYaml, instanceName);
-  appYaml = `${JsYaml.dump(instanceYaml)}\n---\n${appYaml}`
+  yamlList.unshift(instanceYaml);
 
   return {
     code: 20000,
     message: 'success',
     dataSource,
     TemplateEnvs,
-    appYaml,
+    yamlList,
     templateYaml
   };
 }

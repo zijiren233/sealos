@@ -10,22 +10,20 @@ import { useSearchStore } from '@/store/search';
 import type { QueryType, YamlItemType } from '@/types';
 import { ApplicationType, TemplateSourceType } from '@/types/app';
 import { serviceSideProps } from '@/utils/i18n';
-import {
-  generateYamlList,
-  parseTemplateString,
-} from '@/utils/json-yaml';
+import { generateYamlList, parseTemplateString } from '@/utils/json-yaml';
 import { compareFirstLanguages, deepSearch, useCopyData } from '@/utils/tools';
 import { Box, Flex, Icon, Text } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
+import JSYAML from 'js-yaml';
+import { mapValues, reduce } from 'lodash';
 import debounce from 'lodash/debounce';
 import { useTranslation } from 'next-i18next';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import Form from './components/Form';
 import ReadMe from './components/ReadMe';
-import { getTemplateInputDefaultValues, getTemplateValues } from '@/utils/template';
 
 const ErrorModal = dynamic(() => import('./components/ErrorModal'));
 const Header = dynamic(() => import('./components/Header'), { ssr: false });
@@ -37,6 +35,7 @@ export default function EditApp({ appName }: { appName?: string }) {
   const { copyData } = useCopyData();
   const { templateName } = router.query as QueryType;
   const { Loading, setIsLoading } = useLoading();
+  const [forceUpdate, setForceUpdate] = useState(false);
   const { title, applyBtnText, applyMessage, applySuccess, applyError } = editModeMap(false);
   const [templateSource, setTemplateSource] = useState<TemplateSourceType>();
   const [yamlList, setYamlList] = useState<YamlItemType[]>([]);
@@ -70,55 +69,65 @@ export default function EditApp({ appName }: { appName?: string }) {
     return val;
   }, [screenWidth]);
 
-  const generateYamlData = useCallback((templateSource: TemplateSourceType, inputs: Record<string, string>): YamlItemType[] => {
-    if (!templateSource) return [];
-    const app_name = templateSource?.source?.defaults?.app_name?.value;
-    const { defaults, defaultInputs } = getTemplateValues(templateSource);
-    const data = {
-      ...platformEnvs,
-      ...templateSource?.source,
-      inputs: {
-        ...defaultInputs,
-        ...inputs
+  const getFormDefaultValues = (templateSource: TemplateSourceType | undefined) => {
+    const inputs = templateSource?.source?.inputs;
+    return reduce(
+      inputs,
+      (acc, item) => {
+        // @ts-ignore
+        acc[item.key] = item.default;
+        return acc;
       },
-      defaults: defaults,
-    };
-    const generateStr = parseTemplateString(templateSource.appYaml, data);
-    return generateYamlList(generateStr, app_name);
-  }, [platformEnvs])
+      {}
+    );
+  };
 
-  const formOnchangeDebounce = useCallback(debounce((inputs: Record<string, string>) => {
+  const formOnchangeDebounce = debounce((data: any) => {
     try {
       if (!templateSource) return;
-      const list = generateYamlData(templateSource, inputs)
-      setYamlList(list);
+      const app_name = templateSource?.source?.defaults?.app_name?.value;
+
+      const yamlString = templateSource.yamlList
+        ?.map((item) => {
+          // if (item?.kind === 'Instance') {
+          //   const _temp: TemplateInstanceType = cloneDeep(item);
+          //   _temp.spec.defaults = templateSource?.source?.defaults;
+          //   _temp.spec.inputs = isEmpty(data) ? null : data;
+          //   console.log(_temp, templateSource?.source?.defaults, data);
+          //   return JSYAML.dump(_temp);
+          // }
+          return JSYAML.dump(item);
+        })
+        .join('---\n');
+      const output = mapValues(templateSource?.source.defaults, (value) => value.value);
+      const generateStr = parseTemplateString(yamlString, /\$\{\{\s*(.*?)\s*\}\}/g, {
+        ...templateSource?.source,
+        inputs: data,
+        defaults: output
+      });
+      setYamlList(generateYamlList(generateStr, app_name));
     } catch (error) {
       console.log(error);
     }
-  }, 500), [templateSource, generateYamlData]);
+  }, 200);
 
-  const getCachedValue = (): {
-    cachedKey: string,
-    [key: string]: any
-  } | undefined => {
-    if (!cached) return undefined;
+  const getCachedValue = () => {
+    if (!cached) return null;
     const cachedValue = JSON.parse(cached);
-    return cachedValue?.cachedKey === templateName ? cachedValue : undefined;
+    return cachedValue?.cachedKey === templateName ? cachedValue : null;
   };
 
   // form
   const formHook = useForm({
-    defaultValues: getTemplateInputDefaultValues(templateSource),
+    defaultValues: getFormDefaultValues(templateSource),
     values: getCachedValue()
   });
 
   // watch form change, compute new yaml
-  useEffect(() => {
-    const subscription = formHook.watch((data: Record<string, string>) => {
-      data && formOnchangeDebounce(data);
-    });
-    return () => subscription.unsubscribe();
-  }, [formHook, formOnchangeDebounce]);
+  formHook.watch((data: any) => {
+    data && formOnchangeDebounce(data);
+    setForceUpdate(!forceUpdate);
+  });
 
   const submitSuccess = async () => {
     setIsLoading(true);
@@ -165,12 +174,32 @@ export default function EditApp({ appName }: { appName?: string }) {
     });
   };
 
-  const parseTemplate = (res: TemplateSourceType) => {
+  const handleTemplateSource = (res: TemplateSourceType) => {
     try {
       setTemplateSource(res);
-      const inputs = getCachedValue() ? JSON.parse(cached) : getTemplateInputDefaultValues(res);
-      const list = generateYamlData(res, inputs);
-      setYamlList(list);
+      const app_name = res?.source?.defaults?.app_name?.value;
+      const _defaults = mapValues(res?.source.defaults, (value) => value.value);
+      const _inputs = getCachedValue() ? JSON.parse(cached) : getFormDefaultValues(res);
+      const yamlString = res.yamlList
+        ?.map((item) => {
+          // if (item?.kind === 'Instance') {
+          //   const _temp: TemplateInstanceType = cloneDeep(item);
+          //   _temp.spec.defaults = res.source.defaults;
+          //   _temp.spec.inputs = isEmpty(_inputs) ? null : _inputs;
+          //   console.log(_temp, res?.source.defaults, _inputs);
+          //   return JSYAML.dump(_temp);
+          // }
+          return JSYAML.dump(item);
+        })
+        .join('---\n');
+
+      const generateStr = parseTemplateString(yamlString, /\$\{\{\s*(.*?)\s*\}\}/g, {
+        ...res?.source,
+        defaults: _defaults,
+        inputs: _inputs
+      });
+      // console.log(generateStr, '------');
+      setYamlList(generateYamlList(generateStr, app_name));
     } catch (err) {
       console.log(err, 'getTemplateData');
       toast({
@@ -188,7 +217,7 @@ export default function EditApp({ appName }: { appName?: string }) {
     () => getTemplateSource(templateName),
     {
       onSuccess(data) {
-        parseTemplate(data);
+        handleTemplateSource(data);
       },
       onError(err) {
         toast({
@@ -304,7 +333,7 @@ export default function EditApp({ appName }: { appName?: string }) {
             applyCb={() => formHook.handleSubmit(openConfirm(submitSuccess), submitError)()}
           />
           <Flex w="100%" mt="32px" flexDirection="column">
-            <Form formHook={formHook} pxVal={pxVal} formSource={templateSource!} platformEnvs={platformEnvs!} />
+            <Form formHook={formHook} pxVal={pxVal} formSource={templateSource?.source} />
             {/* <Yaml yamlList={yamlList} pxVal={pxVal}></Yaml> */}
             <ReadMe templateDetail={data?.templateYaml!} />
           </Flex>
