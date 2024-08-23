@@ -213,11 +213,10 @@ func (r *ObjectStorageBucketReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	var sa madmin.Credentials
 	var saExits bool
-	userIsNotFound := "The specified user does not exist. (Specified user does not exist)"
 
 	userInfo, err := r.OSAdminClient.GetUserInfo(ctx, username)
 	if err != nil {
-		if err.Error() == userIsNotFound {
+		if madmin.ToErrorResponse(err).Code == "XMinioAdminNoSuchUser" {
 			r.Logger.V(1).Info("the minio user is being created", "user", username, "namespace", namespace)
 			return ctrl.Result{Requeue: true}, nil
 		}

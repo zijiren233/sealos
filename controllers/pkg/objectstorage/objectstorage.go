@@ -40,9 +40,10 @@ func ListUserObjectStorageBucket(client *minio.Client, username string) ([]strin
 		return nil, err
 	}
 
+	bucketNamePrefix := username + "-"
 	var expectBuckets []string
 	for _, bucket := range buckets {
-		if strings.HasPrefix(bucket.Name, username) {
+		if strings.HasPrefix(bucket.Name, bucketNamePrefix) {
 			expectBuckets = append(expectBuckets, bucket.Name)
 		}
 	}
@@ -54,19 +55,17 @@ func ListAllObjectStorageBucket(client *minio.Client) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var allBuckets []string
-	for _, bucket := range buckets {
-		allBuckets = append(allBuckets, bucket.Name)
+	var allBuckets = make([]string, len(buckets))
+	for i, bucket := range buckets {
+		allBuckets[i] = bucket.Name
 	}
 	return allBuckets, nil
 }
 
-func GetObjectStorageSize(client *minio.Client, bucket string) (int64, int64) {
+func GetObjectStorageSize(client *minio.Client, bucket string) (totalSize int64, objectsCount int64) {
 	objects := client.ListObjects(context.Background(), bucket, minio.ListObjectsOptions{
 		Recursive: true,
 	})
-	var totalSize int64
-	var objectsCount int64
 	for object := range objects {
 		totalSize += object.Size
 		objectsCount++
@@ -82,14 +81,12 @@ func GetObjectStorageFlow(promURL, bucket, instance string, startTime, endTime t
 	return flow, nil
 }
 
-func GetUserObjectStorageSize(client *minio.Client, username string) (int64, int64, error) {
+func GetUserObjectStorageSize(client *minio.Client, username string) (totalSize int64, objectsCount int64, err error) {
 	buckets, err := ListUserObjectStorageBucket(client, username)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to list object storage buckets: %v", err)
 	}
 
-	var totalSize int64
-	var objectsCount int64
 	for _, bucketName := range buckets {
 		size, count := GetObjectStorageSize(client, bucketName)
 		totalSize += size

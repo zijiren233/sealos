@@ -149,19 +149,18 @@ func (r *ObjectStorageUserReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	quota := resourceQuota.Spec.Hard.Name(ResourceObjectStorageSize, resource.BinarySI)
 
-	updated := r.initObjectStorageUser(user, username, quota.Value())
+	userUpdated := r.initObjectStorageUser(user, username, quota.Value())
 
 	accessKey := user.Status.AccessKey
 	secretKey := user.Status.SecretKey
 
 	// get object storage user list
-	users, err := r.OSAdminClient.ListUsers(ctx)
+	ok, err := r.hasObjectStorageUser(ctx, user.Name)
 	if err != nil {
-		r.Logger.Error(err, "failed to list object storage users")
+		r.Logger.Error(err, "failed to get user info")
 		return ctrl.Result{}, err
 	}
-
-	if _, ok := users[user.Name]; !ok {
+	if !ok {
 		if err := r.NewObjectStorageUser(ctx, accessKey, secretKey); err != nil {
 			r.Logger.Error(err, "failed to new object storage user", "name", accessKey)
 			return ctrl.Result{}, err
@@ -198,15 +197,15 @@ func (r *ObjectStorageUserReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if user.Status.Size != size {
 		user.Status.Size = size
-		updated = true
+		userUpdated = true
 	}
 
 	if user.Status.ObjectsCount != objectsCount {
 		user.Status.ObjectsCount = objectsCount
-		updated = true
+		userUpdated = true
 	}
 
-	if updated {
+	if userUpdated {
 		if err := r.Status().Update(ctx, user); err != nil {
 			r.Logger.Error(err, "failed to update status", "name", username, "namespace", userNamespace)
 			return ctrl.Result{}, err
@@ -228,6 +227,17 @@ func (r *ObjectStorageUserReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	return ctrl.Result{Requeue: true, RequeueAfter: r.OSUDetectionCycle}, nil
+}
+
+func (r *ObjectStorageUserReconciler) hasObjectStorageUser(ctx context.Context, username string) (bool, error) {
+	_, err := r.OSAdminClient.GetUserInfo(ctx, username)
+	if err != nil {
+		if madmin.ToErrorResponse(err).Code != "XMinioAdminNoSuchUser" {
+			return false, err
+		}
+		return false, nil
+	}
+	return true, nil
 }
 
 func (r *ObjectStorageUserReconciler) NewObjectStorageUser(ctx context.Context, accessKey, secretKey string) error {
@@ -330,14 +340,12 @@ func (r *ObjectStorageUserReconciler) deleteObjectStorageUser(ctx context.Contex
 		return err
 	}
 
-	users, err := r.OSAdminClient.ListUsers(ctx)
+	ok, err := r.hasObjectStorageUser(ctx, username)
 	if err != nil {
-		r.Logger.Error(err, "failed to list object storage users")
+		r.Logger.Error(err, "failed to get user info")
 		return err
 	}
-
-	// if user is already remove return nil
-	if _, ok := users[username]; !ok {
+	if !ok {
 		return nil
 	}
 
