@@ -383,10 +383,11 @@ func (r *UserReconciler) syncServiceAccount(ctx context.Context, user *userv1.Us
 	sa := &v1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      user.Name,
-			Namespace: config.GetUserSystemNamespace(),
+			Namespace: config.GetDefaultNamespace(),
 		},
 	}
-	_ = r.Delete(context.Background(), sa)
+	// ???
+	// _ = r.Delete(context.Background(), sa)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var change controllerutil.OperationResult
 		var err error
