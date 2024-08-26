@@ -39,7 +39,7 @@ func GetUsersSubject(user string) []rbacv1.Subject {
 		{
 			Kind:      "ServiceAccount",
 			Name:      user,
-			Namespace: GetUsersNamespace(user),
+			Namespace: GetUserSystemNamespace(),
 		},
 	}
 }
