@@ -27,7 +27,7 @@ import (
 )
 
 func GetUserSystemNamespace() string {
-	return os.Getenv("user-system")
+	return "user-system"
 }
 
 func GetDefaultNamespace() string {
