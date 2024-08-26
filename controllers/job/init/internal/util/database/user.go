@@ -124,7 +124,6 @@ func PresetAdminUser() error {
 		UserCrUID:    genUserCrUID,
 		Role:         types.RoleOwner,
 		Status:       types.JoinStatusInWorkspace,
-		IsPrivate:    true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 		JoinAt:       time.Now(),
