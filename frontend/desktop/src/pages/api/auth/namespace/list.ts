@@ -1,5 +1,5 @@
 import { jsonRes } from '@/services/backend/response';
-import { NamespaceDto, NSType } from '@/types/team';
+import { NamespaceDto } from '@/types/team';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/services/backend/db/init';
 import { roleToUserRole } from '@/utils/tools';
@@ -26,7 +26,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: x.workspace.id,
       uid: x.workspace.uid,
       createTime: x.workspace.createdAt,
-      nstype: x.isPrivate ? NSType.Private : NSType.Team,
       teamName: x.workspace.displayName,
       role: roleToUserRole(x.role)
     }));

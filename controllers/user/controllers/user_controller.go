@@ -57,9 +57,11 @@ import (
 	"github.com/labring/sealos/controllers/user/controllers/helper"
 )
 
-var userAnnotationCreatorKey = userv1.UserAnnotationCreatorKey
-var userAnnotationOwnerKey = userv1.UserAnnotationOwnerKey
-var userLabelOwnerKey = userv1.UserLabelOwnerKey
+const (
+	userAnnotationCreatorKey = userv1.UserAnnotationCreatorKey
+	userAnnotationOwnerKey   = userv1.UserAnnotationOwnerKey
+	userLabelOwnerKey        = userv1.UserLabelOwnerKey
+)
 
 // UserReconciler reconciles a User object
 type UserReconciler struct {
@@ -381,7 +383,7 @@ func (r *UserReconciler) syncServiceAccount(ctx context.Context, user *userv1.Us
 	sa := &v1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      user.Name,
-			Namespace: config.GetDefaultNamespace(),
+			Namespace: config.GetUserSystemNamespace(),
 		},
 	}
 	_ = r.Delete(context.Background(), sa)
@@ -390,10 +392,10 @@ func (r *UserReconciler) syncServiceAccount(ctx context.Context, user *userv1.Us
 		var err error
 		sa = &v1.ServiceAccount{}
 		sa.Name = user.Name
-		sa.Namespace = config.GetUsersNamespace(user.Name)
+		sa.Namespace = config.GetUserSystemNamespace()
 		sa.Labels = map[string]string{}
 		if err = r.Get(context.Background(), client.ObjectKey{
-			Namespace: config.GetUsersNamespace(user.Name),
+			Namespace: config.GetUserSystemNamespace(),
 			Name:      user.Name,
 		}, sa); err != nil {
 			if apierrors.IsNotFound(err) {
@@ -459,7 +461,7 @@ func (r *UserReconciler) syncServiceAccountSecrets(ctx context.Context, user *us
 		secretName := sa.Secrets[0].Name
 		secrets := &v1.Secret{}
 		secrets.Name = secretName
-		secrets.Namespace = config.GetUsersNamespace(user.Name)
+		secrets.Namespace = config.GetUserSystemNamespace()
 		var err error
 		if err = r.Get(ctx, client.ObjectKeyFromObject(secrets), secrets); err == nil {
 			return nil
@@ -512,7 +514,7 @@ func (r *UserReconciler) syncKubeConfig(ctx context.Context, user *userv1.User) 
 		return ctx
 	}
 	user.Status.ObservedCSRExpirationSeconds = user.Spec.CSRExpirationSeconds
-	cfg := kubeconfig.NewConfig(user.Name, "", user.Spec.CSRExpirationSeconds).WithServiceAccountConfig(config.GetUsersNamespace(user.Name), sa)
+	cfg := kubeconfig.NewConfig(user.Name, "", user.Spec.CSRExpirationSeconds).WithServiceAccountConfig(config.GetUserSystemNamespace(), sa)
 	apiConfig, err := cfg.Apply(r.config, r.Client)
 	if err != nil {
 		helper.SetConditionError(userCondition, "SyncKubeConfigError", err)

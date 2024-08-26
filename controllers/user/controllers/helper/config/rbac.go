@@ -26,6 +26,10 @@ import (
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 )
 
+func GetUserSystemNamespace() string {
+	return os.Getenv("user-system")
+}
+
 func GetDefaultNamespace() string {
 	return os.Getenv("NAMESPACE_NAME")
 }

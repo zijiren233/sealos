@@ -93,7 +93,6 @@ export type Namespace = {
   createTime: Date;
   // 展示到前端的名字
   teamName: string;
-  readonly nstype: NSType;
 };
 export type NamespaceDto = {
   uid: string;
@@ -103,17 +102,11 @@ export type NamespaceDto = {
   // 展示到前端的名字
   teamName: string;
   role: UserRole;
-  readonly nstype: NSType;
 };
 export enum UserRole {
   Owner, // 0
   Manager, // 1
   Developer // 2
-}
-//可能是私人的ns, 也可能是团队的ns
-export enum NSType {
-  Team,
-  Private
 }
 export enum UserNsStatus {
   Inviting,

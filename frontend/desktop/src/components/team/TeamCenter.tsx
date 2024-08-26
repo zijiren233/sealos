@@ -27,7 +27,7 @@ import { formatTime } from '@/utils/format';
 import InviteMember from './InviteMember';
 import UserTable from './userTable';
 import useSessionStore from '@/stores/session';
-import { InvitedStatus, NSType, UserRole, teamMessageDto } from '@/types/team';
+import { InvitedStatus, UserRole, teamMessageDto } from '@/types/team';
 import { TeamUserDto } from '@/types/user';
 import ReciveMessage from './ReciveMessage';
 import { nsListRequest, reciveMessageRequest, teamDetailsRequest } from '@/api/namespace';
@@ -69,7 +69,6 @@ export default function TeamCenter(props: StackProps) {
   const users: TeamUserDto[] = [...(data?.data?.users || [])];
   const curTeamUser = users.find((user) => user.crUid === userCrUid);
   const namespace = data?.data?.namespace;
-  const isTeam = namespace?.nstype === NSType.Team;
   // inviting message list
   const reciveMessage = useQuery({
     queryKey: ['teamRecive', 'teamGroup'],
@@ -85,7 +84,7 @@ export default function TeamCenter(props: StackProps) {
       return data.data?.namespaces;
     }
   });
-  const namespaces = _namespaces?.filter((ns) => ns.nstype !== NSType.Private) || [];
+  const namespaces = _namespaces || [];
   useEffect(() => {
     const defaultNamespace =
       namespaces?.length > 0
@@ -179,7 +178,6 @@ export default function TeamCenter(props: StackProps) {
                         fontSize={'14px'}
                         displayPoint={false}
                         id={ns.uid}
-                        isPrivate={ns.nstype === NSType.Private}
                         isSelected={ns.uid === ns_uid}
                         teamName={ns.teamName}
                         selectedColor="#0884DD"
@@ -213,7 +211,7 @@ export default function TeamCenter(props: StackProps) {
                         <Text fontSize={'24px'} fontWeight={'600'} mr="8px">
                           {namespace.teamName}
                         </Text>
-                        {isTeam && curTeamUser?.role === UserRole.Owner && (
+                        {curTeamUser?.role === UserRole.Owner && (
                           <DissolveTeam
                             ml="auto"
                             nsid={nsid}
@@ -272,8 +270,7 @@ export default function TeamCenter(props: StackProps) {
                       >
                         {users.length}
                       </Flex>
-                      {isTeam &&
-                        curTeamUser &&
+                      {curTeamUser &&
                         [UserRole.Owner, UserRole.Manager].includes(curTeamUser.role) && (
                           <InviteMember
                             ownRole={curTeamUser?.role ?? UserRole.Developer}
@@ -284,7 +281,7 @@ export default function TeamCenter(props: StackProps) {
                         )}
                     </Flex>
                     <Box h="250px" overflow={'scroll'}>
-                      <UserTable users={users} isTeam={isTeam} ns_uid={ns_uid} nsid={nsid} />
+                      <UserTable users={users} ns_uid={ns_uid} nsid={nsid} />
                     </Box>
                   </Stack>
                 </>

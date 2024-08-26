@@ -4,7 +4,6 @@ import { useTranslation } from 'next-i18next';
 
 const NsListItem = ({
   isSelected,
-  isPrivate,
   displayPoint = false,
   teamName,
   selectedColor = 'white',
@@ -12,7 +11,6 @@ const NsListItem = ({
 }: {
   displayPoint: boolean;
   teamName: string;
-  isPrivate: boolean;
   isSelected: boolean;
   selectedColor?: string;
 } & FlexProps) => {
@@ -61,7 +59,7 @@ const NsListItem = ({
             : {})}
           textTransform={'capitalize'}
         >
-          {isPrivate ? t('common:default_team') : teamName}
+          {teamName}
         </Text>
       </HStack>
     </Flex>

@@ -3,7 +3,6 @@ import NsListItem from '@/components/team/NsListItem';
 import TeamCenter from '@/components/team/TeamCenter';
 import useAppStore from '@/stores/app';
 import useSessionStore from '@/stores/session';
-import { NSType } from '@/types/team';
 import { AccessTokenPayload } from '@/types/token';
 import { sessionConfig } from '@/utils/sessionConfig';
 import { switchKubeconfigNamespace } from '@/utils/switchKubeconfigNamespace';
@@ -48,12 +47,6 @@ export default function WorkspaceToggle() {
   const namespaces = data?.data?.namespaces || [];
   const namespace = namespaces.find((x) => x.uid === ns_uid);
 
-  const defaultNamespace = namespaces.find((x) => x.nstype === NSType.Private);
-
-  if (!namespace && defaultNamespace && namespaces.length > 0) {
-    // will be deleted
-    switchTeam({ uid: defaultNamespace.uid });
-  }
   return (
     <HStack position={'relative'} mt={'8px'}>
       <HStack
@@ -75,9 +68,7 @@ export default function WorkspaceToggle() {
         userSelect={'none'}
       >
         <CubeIcon />
-        <Text>
-          {namespace?.nstype === NSType.Private ? t('common:default_team') : namespace?.teamName}
-        </Text>
+        <Text>{namespace?.teamName}</Text>
         <DesktopExchangeIcon ml={'auto'} />
       </HStack>
       {disclosure.isOpen ? (
@@ -123,7 +114,6 @@ export default function WorkspaceToggle() {
                       }}
                       displayPoint={true}
                       id={ns.uid}
-                      isPrivate={ns.nstype === NSType.Private}
                       isSelected={ns.uid === ns_uid}
                       teamName={ns.teamName}
                     />

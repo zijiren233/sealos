@@ -1,5 +1,5 @@
 import { jsonRes } from '@/services/backend/response';
-import { NamespaceDto, NSType } from '@/types/team';
+import { NamespaceDto } from '@/types/team';
 import { TeamUserDto } from '@/types/user';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { globalPrisma, prisma } from '@/services/backend/db/init';
@@ -44,8 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: workspace.id,
       role: roleToUserRole(selfItem.role),
       createTime: workspace.createdAt,
-      teamName: workspace.displayName,
-      nstype: NSType.Team
+      teamName: workspace.displayName
     };
     const users = queryResult.flatMap<TeamUserDto>((x) => {
       const user = userResult.find((user) => user.uid === x.userCr.userUid);

@@ -3,7 +3,7 @@ import { GetUserDefaultNameSpace } from '@/services/backend/kubernetes/user';
 import { jsonRes } from '@/services/backend/response';
 import { bindingRole, modifyWorkspaceRole } from '@/services/backend/team';
 import { getTeamLimit } from '@/services/enable';
-import { NSType, NamespaceDto, UserRole } from '@/types/team';
+import { NamespaceDto, UserRole } from '@/types/team';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/services/backend/db/init';
 import { get_k8s_username } from '@/services/backend/regionAuth';
@@ -81,7 +81,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           createTime: workspace.createdAt,
           uid: workspace.uid,
           id: workspace.id,
-          nstype: NSType.Team,
           teamName: workspace.displayName
         }
       }
