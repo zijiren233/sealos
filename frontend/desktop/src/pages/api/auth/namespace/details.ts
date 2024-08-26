@@ -16,8 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return jsonRes(res, { code: 400, message: 'ns_uid is invaild' });
     const queryResult = await prisma.userWorkspace.findMany({
       where: {
-        workspaceUid: ns_uid,
-        isPrivate: false
+        workspaceUid: ns_uid
       },
       include: {
         workspace: true,

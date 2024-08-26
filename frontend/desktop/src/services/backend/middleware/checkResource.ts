@@ -24,14 +24,7 @@ export const resourceGuard =
         message: RESOURCE_STATUS.USER_CR_NOT_FOUND,
         code: 404
       });
-    const userWorkspaces = userCr.userWorkspace;
-    const privateUserWorkspace = userWorkspaces.find((w) => w.isPrivate);
-    if (!privateUserWorkspace)
-      return jsonRes(res, {
-        message: RESOURCE_STATUS.PRIVATE_WORKSPACE_NOT_FOUND,
-        code: 404
-      });
-    const OwnerWorspaces = userWorkspaces.filter(
+    const OwnerWorspaces = userCr.userWorkspace.filter(
       (w) => w.role === 'OWNER' && w.status === JoinStatus.IN_WORKSPACE
     );
     if (OwnerWorspaces.length > 1)

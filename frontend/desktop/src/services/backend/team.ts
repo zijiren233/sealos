@@ -213,7 +213,6 @@ export const bindingRole = async ({
     data: {
       status: !!direct ? JoinStatus.IN_WORKSPACE : JoinStatus.INVITED,
       role: UserRoleToRole(role),
-      isPrivate: false,
       workspaceUid: ns_uid,
       userCrUid,
       joinAt: new Date(),
@@ -305,8 +304,7 @@ export const mergeUserModifyBinding = async ({
           role,
           userCrUid: userCrUid,
           workspaceUid,
-          status: JoinStatus.IN_WORKSPACE,
-          isPrivate: false
+          status: JoinStatus.IN_WORKSPACE
         }
       }),
       prisma.userWorkspace.delete({

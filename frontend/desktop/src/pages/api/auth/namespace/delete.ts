@@ -27,8 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           workspaceUid: ns_uid,
           userCrUid: payload.userCrUid
         },
-        role: Role.OWNER,
-        isPrivate: false
+        role: Role.OWNER
       },
       include: {
         workspace: true
@@ -42,8 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!res2) throw new Error('fail to delete namespace ');
     const results = await prisma.userWorkspace.deleteMany({
       where: {
-        workspaceUid: ns_uid,
-        isPrivate: false
+        workspaceUid: ns_uid
       }
     });
 

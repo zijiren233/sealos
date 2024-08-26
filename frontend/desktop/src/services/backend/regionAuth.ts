@@ -62,16 +62,14 @@ export async function getRegionToken({
         if (userCrResult) {
           // get a exist user
           const relations = userCrResult.userWorkspace!;
-          const privateRelation = relations.find((r) => r.isPrivate === true);
           return {
             userUid: userCrResult.userUid,
             userCrUid: userCrResult.uid,
             userCrName: userCrResult.crName,
             regionUid: region.uid,
             userId,
-            // there is only one private workspace
-            workspaceId: privateRelation!.workspace.id,
-            workspaceUid: privateRelation!.workspace.uid
+            workspaceId: relations[0]!.workspace.id,
+            workspaceUid: relations[0]!.workspace.uid
           };
         } else {
           const crName = nanoid();
@@ -98,8 +96,7 @@ export async function getRegionToken({
                   userUid
                 }
               },
-              joinAt: new Date(),
-              isPrivate: true
+              joinAt: new Date()
             },
             include: {
               userCr: {

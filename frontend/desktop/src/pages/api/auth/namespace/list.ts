@@ -19,9 +19,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         workspace: true
       }
     });
-    const privateIdx = queryResults.findIndex((x) => x.isPrivate);
-    if (privateIdx < 0) throw Error('Namespace is invalid');
-    queryResults.unshift(queryResults.splice(privateIdx, 1)[0]);
     const namespaces = queryResults.map<NamespaceDto>((x) => ({
       id: x.workspace.id,
       uid: x.workspace.uid,

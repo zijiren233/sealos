@@ -55,7 +55,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         data: {
           status: JoinStatus.IN_WORKSPACE,
           role: UserRoleToRole(linkResults.role),
-          isPrivate: false,
           workspaceUid: linkResults.workspaceUid,
           userCrUid: payload.userCrUid,
           joinAt: new Date(),

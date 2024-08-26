@@ -37,7 +37,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     const own = workspaceToRegionUsers.find((item) => item.userCrUid === payload.userCrUid);
     if (!own) return jsonRes(res, { code: 403, message: 'You are not in namespace' });
-    if (own.isPrivate) return jsonRes(res, { code: 403, message: 'Invaild namespace' });
     if (own.role !== Role.OWNER) return jsonRes(res, { code: 403, message: 'you are not owner' });
     const target = workspaceToRegionUsers.find((item) => item.userCrUid === targetUserCrUid);
     if (!target || target.status !== JoinStatus.IN_WORKSPACE)
