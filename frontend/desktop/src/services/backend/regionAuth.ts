@@ -85,11 +85,14 @@ export async function getRegionToken({
         if (userCrResult.userWorkspace.length === 0) {
           const relation = await createNamespace(
             'private team',
-            userCrResult.userUid,
+            userCrResult.uid,
             userCrResult.crName
           );
-          workspaceId = relation!.id;
-          workspaceUid = relation!.uid;
+          if (!relation) {
+            throw new Error('Failed to create namespace');
+          }
+          workspaceId = relation.id;
+          workspaceUid = relation.uid;
         } else {
           workspaceId = userCrResult.userWorkspace[0].workspace.id;
           workspaceUid = userCrResult.userWorkspace[0].workspace.uid;
