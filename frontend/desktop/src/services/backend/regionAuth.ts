@@ -96,6 +96,7 @@ export async function getRegionToken({
                   userUid
                 }
               },
+              isPrivate: true,
               joinAt: new Date()
             },
             include: {

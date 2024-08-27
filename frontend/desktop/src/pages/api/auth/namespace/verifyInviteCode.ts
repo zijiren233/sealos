@@ -53,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       const result = await prisma.userWorkspace.create({
         data: {
+          isPrivate: false,
           status: JoinStatus.IN_WORKSPACE,
           role: UserRoleToRole(linkResults.role),
           workspaceUid: linkResults.workspaceUid,

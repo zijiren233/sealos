@@ -37,6 +37,7 @@ model UserWorkspace {
   handlerUid   String?    @db.Uuid
   role         Role       @default(DEVELOPER)
   status       JoinStatus
+  isPrivate    Boolean
   joinAt       DateTime?  @db.Timestamptz(3)
   userCr       UserCr     @relation(fields: [userCrUid], references: [uid])
   workspace    Workspace  @relation(fields: [workspaceUid], references: [uid])
