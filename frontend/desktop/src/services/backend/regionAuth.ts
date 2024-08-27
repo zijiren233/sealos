@@ -1,7 +1,6 @@
-import { getUserKubeconfig } from '@/services/backend/kubernetes/admin';
+import { getUserKubeconfig, getUserKubeconfigNotPatch } from '@/services/backend/kubernetes/admin';
 import { globalPrisma, prisma } from '@/services/backend/db/init';
 import { getRegionUid } from '@/services/enable';
-import { GetUserDefaultNameSpace } from '@/services/backend/kubernetes/user';
 import { customAlphabet } from 'nanoid';
 import { retrySerially } from '@/utils/tools';
 import { AccessTokenPayload } from '@/types/token';
@@ -44,6 +43,8 @@ export async function getRegionToken({
   });
   if (!region) throw Error('The REGION_UID is undefined');
 
+  let kcPatched = false;
+
   const payload = await retrySerially<AccessTokenPayload>(
     () =>
       prisma.$transaction(async (tx): Promise<AccessTokenPayload> => {
@@ -83,6 +84,7 @@ export async function getRegionToken({
           if (!kubeconfig) {
             throw new Error('Failed to get user from k8s');
           }
+          kcPatched = true;
           const relation = await createNamespace(
             'private team',
             userCrResult.uid,
@@ -113,7 +115,13 @@ export async function getRegionToken({
   if (!payload) {
     throw new Error('Failed to get user from db');
   }
-  const kubeconfig = await getUserKubeconfig(payload.userCrUid, payload.userCrName);
+
+  let kubeconfig;
+  if (kcPatched) {
+    kubeconfig = await getUserKubeconfigNotPatch(payload.userCrName);
+  } else {
+    kubeconfig = await getUserKubeconfig(payload.userCrUid, payload.userCrName);
+  }
   if (!kubeconfig) {
     throw new Error('Failed to get user from k8s');
   }

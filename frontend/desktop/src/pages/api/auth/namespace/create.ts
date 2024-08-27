@@ -8,7 +8,6 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/services/backend/db/init';
 import { get_k8s_username } from '@/services/backend/regionAuth';
 import { verifyAccessToken } from '@/services/backend/auth';
-import { cache } from 'react';
 
 const TEAM_LIMIT = getTeamLimit();
 
