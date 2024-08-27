@@ -31,10 +31,10 @@ import { TeamUserDto } from '@/types/user';
 import ReciveMessage from './ReciveMessage';
 import { nsListRequest, reciveMessageRequest, teamDetailsRequest } from '@/api/namespace';
 import { useTranslation } from 'next-i18next';
-import { CopyIcon, ListIcon, SettingIcon, StorageIcon } from '@sealos/ui';
+import { CopyIcon, ListIcon, StorageIcon } from '@sealos/ui';
 import NsListItem from '@/components/team/NsListItem';
 
-const TeamCenter = forwardRef((props: StackProps, ref) => {
+const TeamCenter = forwardRef(function (props: StackProps, ref) {
   const session = useSessionStore((s) => s.session);
   const { t } = useTranslation();
   const user = session?.user;
@@ -51,7 +51,10 @@ const TeamCenter = forwardRef((props: StackProps, ref) => {
   );
 
   useImperativeHandle(ref, () => ({
-    open: onOpen,
+    open: () => {
+      setMessageFilter([]);
+      onOpen();
+    },
     close: onClose
   }));
 
@@ -107,28 +110,6 @@ const TeamCenter = forwardRef((props: StackProps, ref) => {
 
   return (
     <>
-      <HStack
-        gap={'8px'}
-        alignItems={'center'}
-        p={'6px 4px'}
-        cursor={'pointer'}
-        borderRadius={'4px'}
-        onClick={() => {
-          setMessageFilter([]);
-          onOpen();
-        }}
-        {...props}
-        _hover={{
-          bgColor: 'rgba(0, 0, 0, 0.03)'
-        }}
-        pb={'10px'}
-        borderBottom={'1px solid rgba(0, 0, 0, 0.05)'}
-        mb={'4px'}
-      >
-        <SettingIcon boxSize={'16px'} color={'white'} />
-        <Text>{t('common:manage_team')}</Text>
-      </HStack>
-
       <Modal isOpen={isOpen} onClose={onClose} isCentered closeOnOverlayClick={false}>
         <ModalOverlay />
         <ModalContent

@@ -13,6 +13,7 @@ import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
 import { CubeIcon, DesktopExchangeIcon } from '../icons';
 import { useEffect, useRef } from 'react';
+import { SettingIcon } from '@sealos/ui';
 
 export default function WorkspaceToggle() {
   const disclosure = useDisclosure();
@@ -22,7 +23,7 @@ export default function WorkspaceToggle() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { init } = useAppStore();
-  const teamCenterRef = useRef<{ open: () => void; close: () => void }>(null);
+  const teamCenterRef = useRef<{ open: () => void; close: () => void }>();
   const mutation = useMutation({
     mutationFn: switchRequest,
     async onSuccess(data) {
@@ -42,17 +43,21 @@ export default function WorkspaceToggle() {
   const switchTeam = async ({ uid }: { uid: string }) => {
     if (ns_uid !== uid && !mutation.isLoading) return mutation.mutateAsync(uid);
   };
+  const openTeamCenter = () => {
+    teamCenterRef.current?.open();
+  };
+  const closeTeamCenter = () => {
+    teamCenterRef.current?.close();
+  };
   const { data } = useQuery({
     queryKey: ['teamList', 'teamGroup'],
-    queryFn: nsListRequest
+    queryFn: nsListRequest,
+    onSuccess: ({ data }) => {
+      if (!data || !data.namespaces.length) openTeamCenter();
+    }
   });
   const namespaces = data?.data?.namespaces || [];
   const namespace = namespaces.find((x) => x.uid === ns_uid);
-  useEffect(() => {
-    if (namespaces.length === 0 && teamCenterRef.current) {
-      teamCenterRef.current.open();
-    }
-  }, [namespaces]);
 
   return (
     <HStack position={'relative'} mt={'8px'}>
@@ -109,7 +114,23 @@ export default function WorkspaceToggle() {
               }}
             >
               <VStack gap={0} alignItems={'stretch'}>
-                <TeamCenter ref={teamCenterRef} />
+                <HStack
+                  gap={'8px'}
+                  alignItems={'center'}
+                  p={'6px 4px'}
+                  cursor={'pointer'}
+                  borderRadius={'4px'}
+                  onClick={openTeamCenter}
+                  _hover={{
+                    bgColor: 'rgba(0, 0, 0, 0.03)'
+                  }}
+                  pb={'10px'}
+                  borderBottom={'1px solid rgba(0, 0, 0, 0.05)'}
+                  mb={'4px'}
+                >
+                  <SettingIcon boxSize={'16px'} color={'white'} />
+                  <Text>{t('common:manage_team')}</Text>
+                </HStack>
                 {/* <Divider bgColor={'rgba(0, 0, 0, 0.05)'} my={'4px'} h={'0px'} /> */}
                 {namespaces.map((ns) => {
                   return (
@@ -131,6 +152,7 @@ export default function WorkspaceToggle() {
           </Box>
         </Box>
       ) : null}
+      <TeamCenter ref={teamCenterRef} />
     </HStack>
   );
 }
