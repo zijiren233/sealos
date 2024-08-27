@@ -75,14 +75,14 @@ export async function getRegionToken({
             userWorkspace: []
           };
         }
-        const kubeconfig = await getUserKubeconfig(userCrResult.userUid, userCrResult.crName);
-        if (!kubeconfig) {
-          throw new Error('Failed to get user from k8s');
-        }
         // get a exist user
         let workspaceId: string;
         let workspaceUid: string;
         if (userCrResult.userWorkspace.length === 0) {
+          const kubeconfig = await getUserKubeconfig(userCrResult.uid, userCrResult.crName);
+          if (!kubeconfig) {
+            throw new Error('Failed to get user from k8s');
+          }
           const relation = await createNamespace(
             'private team',
             userCrResult.uid,
