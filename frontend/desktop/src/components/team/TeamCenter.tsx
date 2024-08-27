@@ -11,17 +11,16 @@ import {
   Divider,
   Stack,
   IconButton,
-  ButtonProps,
   Center,
   VStack,
   Circle,
   HStack,
   StackProps
 } from '@chakra-ui/react';
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import CreateTeam from './CreateTeam';
 import DissolveTeam from './DissolveTeam';
-import { useQuery } from '@tanstack/react-query';
+import React, { useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import { useCopyData } from '@/hooks/useCopyData';
 import { formatTime } from '@/utils/format';
 import InviteMember from './InviteMember';
@@ -35,7 +34,7 @@ import { useTranslation } from 'next-i18next';
 import { CopyIcon, ListIcon, SettingIcon, StorageIcon } from '@sealos/ui';
 import NsListItem from '@/components/team/NsListItem';
 
-export default function TeamCenter(props: StackProps) {
+const TeamCenter = forwardRef((props: StackProps, ref) => {
   const session = useSessionStore((s) => s.session);
   const { t } = useTranslation();
   const user = session?.user;
@@ -50,6 +49,12 @@ export default function TeamCenter(props: StackProps) {
   const [ns_uid, setNs_uid] = useState(() =>
     default_nsid === 'ns-' + k8s_username ? '' : default_ns_uid
   );
+
+  useImperativeHandle(ref, () => ({
+    open: onOpen,
+    close: onClose
+  }));
+
   // team detail and users list
   const { data } = useQuery(
     ['ns-detail', 'teamGroup', { ns_uid, userCrUid }],
@@ -304,4 +309,8 @@ export default function TeamCenter(props: StackProps) {
       </Modal>
     </>
   );
-}
+});
+
+TeamCenter.displayName = 'TeamCenter';
+
+export default TeamCenter;

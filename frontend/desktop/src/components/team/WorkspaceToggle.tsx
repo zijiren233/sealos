@@ -12,6 +12,7 @@ import { jwtDecode } from 'jwt-decode';
 import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
 import { CubeIcon, DesktopExchangeIcon } from '../icons';
+import { useEffect, useRef } from 'react';
 
 export default function WorkspaceToggle() {
   const disclosure = useDisclosure();
@@ -21,6 +22,7 @@ export default function WorkspaceToggle() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { init } = useAppStore();
+  const teamCenterRef = useRef<{ open: () => void; close: () => void }>(null);
   const mutation = useMutation({
     mutationFn: switchRequest,
     async onSuccess(data) {
@@ -46,6 +48,11 @@ export default function WorkspaceToggle() {
   });
   const namespaces = data?.data?.namespaces || [];
   const namespace = namespaces.find((x) => x.uid === ns_uid);
+  useEffect(() => {
+    if (namespaces.length === 0 && teamCenterRef.current) {
+      teamCenterRef.current.open();
+    }
+  }, [namespaces]);
 
   return (
     <HStack position={'relative'} mt={'8px'}>
@@ -102,7 +109,7 @@ export default function WorkspaceToggle() {
               }}
             >
               <VStack gap={0} alignItems={'stretch'}>
-                <TeamCenter />
+                <TeamCenter ref={teamCenterRef} />
                 {/* <Divider bgColor={'rgba(0, 0, 0, 0.05)'} my={'4px'} h={'0px'} /> */}
                 {namespaces.map((ns) => {
                   return (
