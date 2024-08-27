@@ -35,6 +35,13 @@ type UserSpec struct {
 	// +optional
 	//+kubebuilder:default:=7200
 	CSRExpirationSeconds int32 `json:"csrExpirationSeconds,omitempty"`
+
+	// ServiceAccountOnly indicates whether to only create a ServiceAccount.
+	// If true, the controller will only create the ServiceAccount and skip
+	// creating the namespace, roles, and role bindings.
+	// +optional
+	// +kubebuilder:default:=false
+	ServiceAccountOnly bool `json:"serviceAccountOnly,omitempty"`
 }
 type RoleType string
 

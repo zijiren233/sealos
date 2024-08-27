@@ -97,9 +97,11 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if ok, err := r.finalizer.RemoveFinalizer(ctx, user, func(ctx context.Context, obj client.Object) error {
-		ns := &v1.Namespace{}
-		ns.Name = config.GetUsersNamespace(user.Name)
-		_ = r.Delete(ctx, ns)
+		if !user.Spec.ServiceAccountOnly {
+			ns := &v1.Namespace{}
+			ns.Name = config.GetUsersNamespace(user.Name)
+			_ = r.Delete(ctx, ns)
+		}
 		return nil
 	}); ok {
 		return ctrl.Result{}, err
@@ -165,14 +167,23 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 
 	pipelines := []func(ctx context.Context, user *userv1.User) context.Context{
 		r.initStatus,
-		r.syncNamespace,
 		r.syncServiceAccount,
 		r.syncServiceAccountSecrets,
 		r.syncKubeConfig,
-		r.syncRole,
-		r.syncRoleBinding,
-		r.syncFinalStatus,
 	}
+
+	// Only create ServiceAccount if ServiceAccountOnly is true
+	if !user.Spec.ServiceAccountOnly {
+		pipelines = append([]func(ctx context.Context, user *userv1.User) context.Context{
+			r.syncNamespace,
+			r.syncRole,
+			r.syncRoleBinding,
+		}, pipelines...)
+	}
+
+	pipelines = append([]func(ctx context.Context, user *userv1.User) context.Context{
+		r.syncFinalStatus,
+	}, pipelines...)
 
 	for _, fn := range pipelines {
 		ctx = fn(ctx, user)

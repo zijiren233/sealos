@@ -132,6 +132,9 @@ async function setUserKubeconfig(kc: k8s.KubeConfig, uid: string, k8s_username: 
           uid,
           updateTime
         }
+      },
+      spec: {
+        serviceAccountOnly: true
       }
     };
     await client.createClusterCustomObject(group, version, plural, resourceObj);
@@ -179,6 +182,9 @@ async function setUserTeamCreate(kc: k8s.KubeConfig, k8s_username: string, owner
         'user.sealos.io/type': 'Group',
         owner: updateTime
       }
+    },
+    spec: {
+      serviceAccountOnly: false
     }
   };
   await client.createClusterCustomObject(group, version, plural, resourceObj);

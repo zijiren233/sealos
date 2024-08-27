@@ -5,8 +5,8 @@ import { GetUserDefaultNameSpace } from '@/services/backend/kubernetes/user';
 import { customAlphabet } from 'nanoid';
 import { retrySerially } from '@/utils/tools';
 import { AccessTokenPayload } from '@/types/token';
-import { JoinStatus, Role } from 'prisma/region/generated/client';
 import { generateAccessToken, generateAppToken } from '@/services/backend/auth';
+import { createNamespace } from '@/pages/api/auth/namespace/create';
 
 const LetterBytes = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const HostnameLength = 8;
@@ -59,73 +59,50 @@ export async function getRegionToken({
             }
           }
         });
-        if (userCrResult) {
-          // get a exist user
-          const relations = userCrResult.userWorkspace!;
-          return {
-            userUid: userCrResult.userUid,
-            userCrUid: userCrResult.uid,
-            userCrName: userCrResult.crName,
-            regionUid: region.uid,
-            userId,
-            workspaceId: relations[0]!.workspace.id,
-            workspaceUid: relations[0]!.workspace.uid
-          };
-        } else {
+        if (!userCrResult) {
           const crName = nanoid();
-          const regionResult = await tx.userCr.findUnique({
-            where: {
+          const userCrCreateResult = await tx.userCr.create({
+            data: {
+              crName,
               userUid
             }
           });
-          if (regionResult) throw Error('the user is already exist');
-          const workspaceId = GetUserDefaultNameSpace(crName);
-          const result = await tx.userWorkspace.create({
-            data: {
-              status: JoinStatus.IN_WORKSPACE,
-              role: Role.OWNER,
-              workspace: {
-                create: {
-                  id: workspaceId,
-                  displayName: 'private team'
-                }
-              },
-              userCr: {
-                create: {
-                  crName,
-                  userUid
-                }
-              },
-              isPrivate: true,
-              joinAt: new Date()
-            },
-            include: {
-              userCr: {
-                select: {
-                  uid: true,
-                  crName: true,
-                  userUid: true
-                }
-              },
-              workspace: {
-                select: {
-                  id: true,
-                  uid: true
-                }
-              }
-            }
-          });
-          return {
-            userCrName: result.userCr.crName,
-            userCrUid: result.userCr.uid,
-            userUid: result.userCr.userUid,
-            regionUid: region.uid,
-            userId,
-            // there is only one private workspace
-            workspaceId: result.workspace.id,
-            workspaceUid: result.workspace.uid
+          if (!userCrCreateResult) {
+            throw new Error('Failed to create userCr');
+          }
+          userCrResult = {
+            ...userCrCreateResult,
+            userWorkspace: []
           };
         }
+        const kubeconfig = await getUserKubeconfig(userCrResult.userUid, userCrResult.crName);
+        if (!kubeconfig) {
+          throw new Error('Failed to get user from k8s');
+        }
+        // get a exist user
+        let workspaceId: string;
+        let workspaceUid: string;
+        if (userCrResult.userWorkspace.length === 0) {
+          const relation = await createNamespace(
+            'private team',
+            userCrResult.userUid,
+            userCrResult.crName
+          );
+          workspaceId = relation!.id;
+          workspaceUid = relation!.uid;
+        } else {
+          workspaceId = userCrResult.userWorkspace[0].workspace.id;
+          workspaceUid = userCrResult.userWorkspace[0].workspace.uid;
+        }
+        return {
+          userUid: userCrResult.userUid,
+          userCrUid: userCrResult.uid,
+          userCrName: userCrResult.crName,
+          regionUid: region.uid,
+          userId,
+          workspaceId,
+          workspaceUid
+        };
       }),
     3
   );
