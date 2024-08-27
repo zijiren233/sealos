@@ -380,18 +380,10 @@ func (r *UserReconciler) syncServiceAccount(ctx context.Context, user *userv1.Us
 		}
 	}()
 	ctx = context.WithValue(ctx, ctxKey("reNew"), false)
-	sa := &v1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      user.Name,
-			Namespace: config.GetDefaultNamespace(),
-		},
-	}
-	// ???
-	// _ = r.Delete(context.Background(), sa)
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var change controllerutil.OperationResult
 		var err error
-		sa = &v1.ServiceAccount{}
+		sa := &v1.ServiceAccount{}
 		sa.Name = user.Name
 		sa.Namespace = config.GetUserSystemNamespace()
 		sa.Labels = map[string]string{}
@@ -426,12 +418,12 @@ func (r *UserReconciler) syncServiceAccount(ctx context.Context, user *userv1.Us
 			ctx = context.WithValue(ctx, ctxKey("reNew"), true)
 		}
 		saCondition.Message = fmt.Sprintf("sync namespace sa %s/%s successfully", sa.Name, sa.ResourceVersion)
+		ctx = context.WithValue(ctx, ctxKey("serviceAccount"), sa)
 		return nil
 	}); err != nil {
 		helper.SetConditionError(saCondition, "SyncUserError", err)
 		r.Recorder.Eventf(user, v1.EventTypeWarning, "syncUserServiceAccount", "Sync User namespace sa %s is error: %v", user.Name, err)
 	}
-	ctx = context.WithValue(ctx, ctxKey("serviceAccount"), sa)
 	return ctx
 }
 
