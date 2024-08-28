@@ -40,7 +40,7 @@ const useSessionStore = create<SessionState>()(
       oauth_state: '',
       token: '',
       lastWorkSpaceId: '',
-      setSession: (ss: Session) => () => {
+      setSession: (ss: Session) => {
         console.log('use session store: ', ss);
         set({ session: ss });
       },
