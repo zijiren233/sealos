@@ -92,7 +92,7 @@ func PresetAdminUser() error {
 	if err != nil {
 		return fmt.Errorf("failed to generate nano id: %v", err)
 	}
-	genUserCrUID := uuid.New()
+	genUserCrUID, genWorkspaceUID := uuid.New(), uuid.New()
 	if err = v2Account.CreateUser(&types.OauthProvider{
 		UserUID:      common.AdminUID(),
 		ProviderType: types.OauthProviderTypePassword,
@@ -113,6 +113,21 @@ func PresetAdminUser() error {
 		Nickname:  adminUserName,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+	}, &types.Workspace{
+		UID:         genWorkspaceUID,
+		ID:          workspacePrefix + adminUserName,
+		DisplayName: "private team",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}, &types.UserWorkspace{
+		WorkspaceUID: genWorkspaceUID,
+		UserCrUID:    genUserCrUID,
+		Role:         types.RoleOwner,
+		Status:       types.JoinStatusInWorkspace,
+		IsPrivate:    true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+		JoinAt:       time.Now(),
 	}); err != nil {
 		return fmt.Errorf("failed to create user: %v", err)
 	}

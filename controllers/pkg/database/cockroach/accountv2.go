@@ -51,8 +51,8 @@ const (
 	EnvBaseBalance = "BASE_BALANCE"
 )
 
-func (c *Cockroach) CreateUser(oAuth *types.OauthProvider, regionUserCr *types.RegionUserCr, user *types.User) error {
-	findUser, findRegionUserCr := &types.User{}, &types.RegionUserCr{}
+func (c *Cockroach) CreateUser(oAuth *types.OauthProvider, regionUserCr *types.RegionUserCr, user *types.User, workspace *types.Workspace, userWorkspace *types.UserWorkspace) error {
+	findUser, findRegionUserCr, findUserWorkspace := &types.User{}, &types.RegionUserCr{}, &types.UserWorkspace{}
 	if c.DB.Where(&types.User{Nickname: user.Nickname}).First(findUser).Error == gorm.ErrRecordNotFound {
 		findUser = user
 		if err := c.DB.Save(user).Error; err != nil {
@@ -67,8 +67,22 @@ func (c *Cockroach) CreateUser(oAuth *types.OauthProvider, regionUserCr *types.R
 	}
 	if c.Localdb.Where(&types.RegionUserCr{CrName: regionUserCr.CrName}).First(findRegionUserCr).Error == gorm.ErrRecordNotFound {
 		regionUserCr.UserUID = findUser.UID
+		findRegionUserCr = regionUserCr
 		if err := c.Localdb.Save(regionUserCr).Error; err != nil {
 			return fmt.Errorf("failed to create user region cr: %w", err)
+		}
+	}
+	if c.Localdb.Where(types.UserWorkspace{UserCrUID: findRegionUserCr.UID}).First(findUserWorkspace).Error == gorm.ErrRecordNotFound {
+		userWorkspace.UserCrUID = findRegionUserCr.UID
+		findUserWorkspace = userWorkspace
+		if err := c.Localdb.Save(userWorkspace).Error; err != nil {
+			return fmt.Errorf("failed to create user workspace: %w", err)
+		}
+	}
+	if c.Localdb.Where(types.Workspace{UID: findUserWorkspace.WorkspaceUID}).First(&types.Workspace{}).Error == gorm.ErrRecordNotFound {
+		workspace.UID = findUserWorkspace.WorkspaceUID
+		if err := c.Localdb.Save(workspace).Error; err != nil {
+			return fmt.Errorf("failed to create workspace: %w", err)
 		}
 	}
 	return nil

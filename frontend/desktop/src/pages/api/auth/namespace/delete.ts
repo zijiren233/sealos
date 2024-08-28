@@ -1,6 +1,6 @@
 import { setUserTeamDelete } from '@/services/backend/kubernetes/admin';
 import { jsonRes } from '@/services/backend/response';
-import { applyDeleteRequest } from '@/services/backend/team';
+import { applyDeleteUserTeam } from '@/services/backend/team';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/services/backend/db/init';
 import { validate } from 'uuid';
@@ -34,11 +34,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     });
     if (!queryResult) return jsonRes(res, { code: 404, message: 'the namespace is not found' });
-    const creator = queryResult.workspace.id.replace('ns-', '');
-    const res1 = await setUserTeamDelete(creator);
-    if (!res1) throw new Error('fail to update user ');
-    const res2 = await applyDeleteRequest(creator);
-    if (!res2) throw new Error('fail to delete namespace ');
+    const usName = queryResult.workspace.id.replace('ns-', '');
+    const res1 = await setUserTeamDelete(usName);
+    if (!res1) throw new Error('fail to update user namespace');
+    const res2 = await applyDeleteUserTeam(usName);
+    if (!res2) throw new Error('fail to delete user namespace');
     const results = await prisma.userWorkspace.deleteMany({
       where: {
         workspaceUid: ns_uid

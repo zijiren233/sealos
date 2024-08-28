@@ -48,8 +48,8 @@ func GetUserNameByNamespace(namespace string) string {
 	return strings.TrimPrefix(namespace, "ns-")
 }
 
-func GetUsersNamespace(user string) string {
-	return fmt.Sprintf("ns-%s", user)
+func GetUserNamespace(usernamespaceName string) string {
+	return fmt.Sprintf("ns-%s", usernamespaceName)
 }
 
 func GetGroupRoleBindingName(user string) string {

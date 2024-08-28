@@ -4,30 +4,27 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: users.user.sealos.io
+  name: usernamespaces.user.sealos.io
 spec:
   group: user.sealos.io
   names:
-    kind: User
-    listKind: UserList
-    plural: users
-    singular: user
+    kind: UserNamespace
+    listKind: UserNamespaceList
+    plural: usernamespaces
+    singular: usernamespace
   scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.observedCSRExpirationSeconds
-      name: ExpirationSeconds
-      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1
     schema:
       openAPIV3Schema:
-        description: User is the Schema for the users API
+        description: UserNamespace is the Schema for the usernamespaces API
         properties:
           apiVersion:
             description: |-
@@ -47,27 +44,20 @@ spec:
           metadata:
             type: object
           spec:
-            description: UserSpec defines the desired state of User
+            description: UserNamespaceSpec defines the desired state of UserNamespace
             properties:
-              csrExpirationSeconds:
-                default: 7200
-                description: |-
-                  expirationSeconds is the requested duration of validity of the issued
-                  certificate. The certificate signer may issue a certificate with a different
-                  validity duration so a client must check the delta between the notBefore and
-                  notAfter fields in the issued certificate to determine the actual duration.
-
-
-                  The minimum valid value for expirationSeconds is 600, i.e. 10 minutes.
-                format: int32
-                type: integer
+              creator:
+                minLength: 1
+                type: string
+            required:
+            - creator
             type: object
           status:
-            description: UserStatus defines the observed state of User
+            description: UserNamespaceStatus defines the observed state of UserNamespace
             properties:
               conditions:
                 description: Conditions contains the different condition statuses
-                  for this user.
+                  for this user namespace.
                 items:
                   properties:
                     lastHeartbeatTime:
@@ -99,22 +89,15 @@ spec:
                   - type
                   type: object
                 type: array
-              kubeConfig:
-                type: string
-              observedCSRExpirationSeconds:
-                default: 7200
-                format: int32
-                type: integer
-              observedGeneration:
-                description: The generation observed by the user controller.
-                format: int64
-                type: integer
               phase:
                 default: Unknown
                 description: Phase is the recently observed lifecycle phase of user
+                  namespace
+                enum:
+                - Unknown
+                - Pending
+                - Ready
                 type: string
-            required:
-            - kubeConfig
             type: object
         type: object
     served: true

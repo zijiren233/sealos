@@ -33,7 +33,6 @@ import (
 	"github.com/labring/sealos/controllers/user/controllers/helper/kubeconfig"
 
 	v1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -97,11 +96,6 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if ok, err := r.finalizer.RemoveFinalizer(ctx, user, func(ctx context.Context, obj client.Object) error {
-		if !user.Spec.ServiceAccountOnly {
-			ns := &v1.Namespace{}
-			ns.Name = config.GetUsersNamespace(user.Name)
-			_ = r.Delete(ctx, ns)
-		}
 		return nil
 	}); ok {
 		return ctrl.Result{}, err
@@ -141,8 +135,6 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts utilcontroller.
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&userv1.User{}, builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.AnnotationChangedPredicate{}))).
-		Watches(&rbacv1.Role{}, ownerEventHandler).
-		Watches(&rbacv1.RoleBinding{}, ownerEventHandler).
 		Watches(&v1.Secret{}, ownerEventHandler).
 		Watches(&v1.ServiceAccount{}, ownerEventHandler).
 		WithOptions(kubecontroller.Options{
@@ -170,20 +162,8 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 		r.syncServiceAccount,
 		r.syncServiceAccountSecrets,
 		r.syncKubeConfig,
-	}
-
-	// Only create ServiceAccount if ServiceAccountOnly is true
-	if !user.Spec.ServiceAccountOnly {
-		pipelines = append([]func(ctx context.Context, user *userv1.User) context.Context{
-			r.syncNamespace,
-			r.syncRole,
-			r.syncRoleBinding,
-		}, pipelines...)
-	}
-
-	pipelines = append([]func(ctx context.Context, user *userv1.User) context.Context{
 		r.syncFinalStatus,
-	}, pipelines...)
+	}
 
 	for _, fn := range pipelines {
 		ctx = fn(ctx, user)
@@ -214,164 +194,6 @@ func (r *UserReconciler) initStatus(ctx context.Context, user *userv1.User) cont
 		user.Status.Conditions = helper.UpdateCondition(user.Status.Conditions, initializedCondition)
 	}
 	return ctx
-}
-
-func (r *UserReconciler) syncNamespace(ctx context.Context, user *userv1.User) context.Context {
-	namespaceConditionType := userv1.ConditionType("NamespaceSyncReady")
-	nsCondition := &userv1.Condition{
-		Type:               namespaceConditionType,
-		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		LastHeartbeatTime:  metav1.Now(),
-		Reason:             string(userv1.Ready),
-		Message:            "sync namespace successfully",
-	}
-	condition := helper.GetCondition(user.Status.Conditions, nsCondition)
-	defer func() {
-		if helper.DiffCondition(condition, nsCondition) {
-			r.saveCondition(user, nsCondition.DeepCopy())
-		}
-	}()
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var change controllerutil.OperationResult
-		var err error
-		ns := &v1.Namespace{}
-		ns.Name = config.GetUsersNamespace(user.Name)
-		ns.Labels = map[string]string{}
-		if err = r.Get(ctx, client.ObjectKeyFromObject(ns), ns); err != nil {
-			if !apierrors.IsNotFound(err) {
-				return err
-			}
-		}
-		var isCreated bool
-		if !ns.CreationTimestamp.IsZero() {
-			isCreated = true
-			r.Logger.V(1).Info("define namespace User namespace is created", "isCreated", isCreated, "namespace", ns.Name)
-		}
-		if change, err = controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
-			if ns.Annotations == nil {
-				ns.Annotations = make(map[string]string)
-			}
-			ns.Annotations[userAnnotationCreatorKey] = user.Name
-			ns.Annotations[userAnnotationOwnerKey] = user.Annotations[userAnnotationOwnerKey]
-			ns.Labels = config.SetPodSecurity(ns.Labels)
-			// add label for namespace to filter
-			ns.Labels[userLabelOwnerKey] = user.Annotations[userAnnotationOwnerKey]
-			ns.SetOwnerReferences([]metav1.OwnerReference{})
-			return controllerutil.SetControllerReference(user, ns, r.Scheme)
-		}); err != nil {
-			return fmt.Errorf("unable to create namespace by User: %w", err)
-		}
-		r.Logger.V(1).Info("create or update namespace by User", "OperationResult", change)
-		nsCondition.Message = fmt.Sprintf("sync namespace %s/%s successfully", ns.Name, ns.ResourceVersion)
-		return nil
-	}); err != nil {
-		helper.SetConditionError(nsCondition, "SyncUserError", err)
-		r.Recorder.Eventf(user, v1.EventTypeWarning, "syncUser", "Sync User namespace %s is error: %v", user.Name, err)
-	}
-	return ctx
-}
-
-func (r *UserReconciler) syncRole(ctx context.Context, user *userv1.User) context.Context {
-	roleConditionType := userv1.ConditionType("RoleSyncReady")
-	roleCondition := &userv1.Condition{
-		Type:               roleConditionType,
-		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		LastHeartbeatTime:  metav1.Now(),
-		Reason:             string(userv1.Ready),
-		Message:            "sync namespace role successfully",
-	}
-	condition := helper.GetCondition(user.Status.Conditions, roleCondition)
-	defer func() {
-		if helper.DiffCondition(condition, roleCondition) {
-			r.saveCondition(user, roleCondition.DeepCopy())
-		}
-	}()
-	//create three roles
-	r.createRole(ctx, roleCondition, user, userv1.OwnerRoleType)
-	r.createRole(ctx, roleCondition, user, userv1.ManagerRoleType)
-	r.createRole(ctx, roleCondition, user, userv1.DeveloperRoleType)
-
-	return ctx
-}
-
-func (r *UserReconciler) createRole(ctx context.Context, condition *userv1.Condition, user *userv1.User, roleType userv1.RoleType) {
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var change controllerutil.OperationResult
-		var err error
-		role := &rbacv1.Role{}
-		role.Name = string(roleType)
-		role.Namespace = config.GetUsersNamespace(user.Name)
-		role.Labels = map[string]string{}
-		if change, err = controllerutil.CreateOrUpdate(ctx, r.Client, role, func() error {
-			role.Annotations = map[string]string{
-				userAnnotationCreatorKey: user.Name,
-				userAnnotationOwnerKey:   user.Annotations[userAnnotationOwnerKey],
-			}
-			role.Rules = config.GetUserRole(roleType)
-			return controllerutil.SetControllerReference(user, role, r.Scheme)
-		}); err != nil {
-			return fmt.Errorf("unable to create namespace role by User: %w", err)
-		}
-		r.Logger.V(1).Info("create or update namespace role  by User", "OperationResult", change)
-		condition.Message = fmt.Sprintf("sync namespace role %s/%s successfully", role.Name, role.ResourceVersion)
-		return nil
-	}); err != nil {
-		helper.SetConditionError(condition, "SyncUserError", err)
-		r.Recorder.Eventf(user, v1.EventTypeWarning, "syncUserRole", "Sync User namespace role %s is error: %v", user.Name, err)
-	}
-}
-
-func (r *UserReconciler) syncRoleBinding(ctx context.Context, user *userv1.User) context.Context {
-	roleBindingConditionType := userv1.ConditionType("RoleBindingSyncReady")
-	rbCondition := &userv1.Condition{
-		Type:               roleBindingConditionType,
-		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		LastHeartbeatTime:  metav1.Now(),
-		Reason:             string(userv1.Ready),
-		Message:            "sync namespace role binding successfully",
-	}
-	condition := helper.GetCondition(user.Status.Conditions, rbCondition)
-	defer func() {
-		if helper.DiffCondition(condition, rbCondition) {
-			r.saveCondition(user, rbCondition.DeepCopy())
-		}
-	}()
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var change controllerutil.OperationResult
-		var err error
-		roleBinding := &rbacv1.RoleBinding{}
-		roleBinding.Name = user.Name
-		roleBinding.Namespace = config.GetUsersNamespace(user.Name)
-		roleBinding.Labels = map[string]string{}
-		if change, err = controllerutil.CreateOrUpdate(ctx, r.Client, roleBinding, func() error {
-			roleBinding.Annotations = map[string]string{
-				userAnnotationCreatorKey: user.Name,
-				userAnnotationOwnerKey:   user.Annotations[userAnnotationOwnerKey],
-			}
-			roleBinding.RoleRef = rbacv1.RoleRef{
-				APIGroup: rbacv1.GroupName,
-				Kind:     "Role",
-				Name:     string(userv1.OwnerRoleType),
-			}
-			roleBinding.Subjects = config.GetUsersSubject(user.Name)
-			return controllerutil.SetControllerReference(user, roleBinding, r.Scheme)
-		}); err != nil {
-			return fmt.Errorf("unable to create namespace role binding by User: %w", err)
-		}
-		r.Logger.V(1).Info("create or update namespace role binding by User", "OperationResult", change)
-		rbCondition.Message = fmt.Sprintf("sync namespace role binding %s/%s successfully", roleBinding.Name, roleBinding.ResourceVersion)
-		return nil
-	}); err != nil {
-		helper.SetConditionError(rbCondition, "SyncUserError", err)
-		r.Recorder.Eventf(user, v1.EventTypeWarning, "syncUserRoleBinding", "Sync User namespace role binding %s is error: %v", user.Name, err)
-	}
-	return ctx
-}
-func (r *UserReconciler) saveCondition(user *userv1.User, condition *userv1.Condition) {
-	user.Status.Conditions = helper.UpdateCondition(user.Status.Conditions, *condition)
 }
 
 func (r *UserReconciler) syncServiceAccount(ctx context.Context, user *userv1.User) context.Context {
@@ -595,7 +417,10 @@ func (r *UserReconciler) syncFinalStatus(ctx context.Context, user *userv1.User)
 	}
 	defer r.saveCondition(user, condition)
 
-	if !helper.IsConditionsTrue(user.Status.Conditions) {
+	if !helper.IsConditionTrue(user.Status.Conditions, userv1.Condition{Type: userv1.Ready}) &&
+		!helper.IsConditionTrue(user.Status.Conditions, userv1.Condition{Type: "ServiceAccountSyncReady"}) &&
+		!helper.IsConditionTrue(user.Status.Conditions, userv1.Condition{Type: "ServiceAccountSecretsSyncReady"}) &&
+		!helper.IsConditionTrue(user.Status.Conditions, userv1.Condition{Type: "KubeConfigSyncReady"}) {
 		condition.LastHeartbeatTime = metav1.Now()
 		condition.Status = v1.ConditionFalse
 		condition.Reason = "Not" + string(userv1.Ready)
@@ -605,6 +430,10 @@ func (r *UserReconciler) syncFinalStatus(ctx context.Context, user *userv1.User)
 		user.Status.Phase = userv1.UserActive
 	}
 	return ctx
+}
+
+func (r *UserReconciler) saveCondition(user *userv1.User, condition *userv1.Condition) {
+	user.Status.Conditions = helper.UpdateCondition(user.Status.Conditions, *condition)
 }
 
 func (r *UserReconciler) updateStatus(ctx context.Context, nn types.NamespacedName, status *userv1.UserStatus) error {

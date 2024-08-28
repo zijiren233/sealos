@@ -207,13 +207,6 @@ spec:
                   expirationSeconds is 600, i.e. 10 minutes."
                 format: int32
                 type: integer
-              serviceAccountOnly:
-                default: false
-                description: |-
-                  ServiceAccountOnly indicates whether to only create a ServiceAccount.
-                  If true, the controller will only create the ServiceAccount and skip
-                  creating the namespace, roles, and role bindings.
-                type: boolean
             type: object
           status:
             description: UserStatus defines the observed state of User

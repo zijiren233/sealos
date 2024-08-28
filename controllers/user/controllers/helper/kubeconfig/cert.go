@@ -107,7 +107,7 @@ func (c *CertConfig) Apply(config *rest.Config, _ client.Client) (*api.Config, e
 			ctx: {
 				Cluster:   c.clusterName,
 				AuthInfo:  c.user,
-				Namespace: confighelper.GetUsersNamespace(c.user),
+				Namespace: confighelper.GetUserNamespace(c.user),
 			},
 		},
 		AuthInfos: map[string]*api.AuthInfo{

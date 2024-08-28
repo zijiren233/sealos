@@ -6,18 +6,19 @@ import { retrySerially } from '@/utils/tools';
 import { AccessTokenPayload } from '@/types/token';
 import { generateAccessToken, generateAppToken } from '@/services/backend/auth';
 import { createNamespace } from '@/pages/api/auth/namespace/create';
+import { GetUserNamespace } from '@/services/backend/kubernetes/user';
 
 const LetterBytes = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const HostnameLength = 8;
 
 const nanoid = customAlphabet(LetterBytes, HostnameLength);
 
-export async function get_k8s_username() {
+export async function getUniUserNamespace() {
   return await retrySerially<string | null>(async () => {
     const crName = nanoid();
-    const result = await prisma.userCr.findUnique({
+    const result = await prisma.workspace.findUnique({
       where: {
-        crName
+        id: GetUserNamespace(crName)
       }
     });
     if (!result) return crName;

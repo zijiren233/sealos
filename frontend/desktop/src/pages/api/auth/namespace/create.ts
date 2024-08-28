@@ -1,12 +1,12 @@
-import { getTeamKubeconfig } from '@/services/backend/kubernetes/admin';
-import { GetUserDefaultNameSpace } from '@/services/backend/kubernetes/user';
+import { getTeamCr } from '@/services/backend/kubernetes/admin';
+import { GetUserNamespace } from '@/services/backend/kubernetes/user';
 import { jsonRes } from '@/services/backend/response';
 import { bindingRole, modifyWorkspaceRole } from '@/services/backend/team';
 import { getTeamLimit } from '@/services/enable';
 import { NamespaceDto, UserRole } from '@/types/team';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/services/backend/db/init';
-import { get_k8s_username } from '@/services/backend/regionAuth';
+import { getUniUserNamespace } from '@/services/backend/regionAuth';
 import { verifyAccessToken } from '@/services/backend/auth';
 
 const TEAM_LIMIT = getTeamLimit();
@@ -18,13 +18,13 @@ export async function createNamespace(
   owner: string,
   namespace?: string
 ): Promise<NamespaceDto | null> {
-  const workspace_creater = namespace || (await get_k8s_username());
+  const workspace_creater = namespace || (await getUniUserNamespace());
   if (!workspace_creater) throw new Error('fail to get workspace_creater');
-  // ns-
-  const workspaceId = GetUserDefaultNameSpace(workspace_creater);
+  // add ns- prefix
+  const workspaceId = GetUserNamespace(workspace_creater);
 
-  // 创建伪user
-  const creater_kc_str = await getTeamKubeconfig(workspace_creater, owner);
+  // 创建user namespace
+  const creater_kc_str = await getTeamCr(workspace_creater, owner);
   if (!creater_kc_str) throw new Error('fail to get kubeconfig');
 
   const workspace = await prisma.workspace.create({

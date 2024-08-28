@@ -132,9 +132,6 @@ async function setUserKubeconfig(kc: k8s.KubeConfig, uid: string, k8s_username: 
           uid,
           updateTime
         }
-      },
-      spec: {
-        serviceAccountOnly: true
       }
     };
     await client.createClusterCustomObject(group, version, plural, resourceObj);
@@ -165,9 +162,9 @@ async function setUserKubeconfig(kc: k8s.KubeConfig, uid: string, k8s_username: 
 
 async function setUserTeamCreate(kc: k8s.KubeConfig, k8s_username: string, owner: string) {
   const group = 'user.sealos.io';
-  const resourceKind = 'User';
+  const resourceKind = 'UserNamespace';
   const version = 'v1';
-  const plural = 'users';
+  const plural = 'usernamespaces';
   const updateTime = k8sFormatTime(new Date());
   const client = kc.makeApiClient(k8s.CustomObjectsApi);
   const resourceObj = {
@@ -179,12 +176,11 @@ async function setUserTeamCreate(kc: k8s.KubeConfig, k8s_username: string, owner
       },
       name: k8s_username,
       labels: {
-        'user.sealos.io/type': 'Group',
         owner: updateTime
       }
     },
     spec: {
-      serviceAccountOnly: false
+      creator: owner
     }
   };
   await client.createClusterCustomObject(group, version, plural, resourceObj);
@@ -194,7 +190,7 @@ async function setUserTeamCreate(kc: k8s.KubeConfig, k8s_username: string, owner
 async function removeUserTeam(kc: k8s.KubeConfig, k8s_username: string) {
   const group = 'user.sealos.io';
   const version = 'v1';
-  const plural = 'users';
+  const plural = 'usernamespaces';
   const updateTime = k8sFormatTime(new Date());
   const client = kc.makeApiClient(k8s.CustomObjectsApi);
   const patchs = [
@@ -246,7 +242,6 @@ async function removeUser(kc: k8s.KubeConfig, k8s_username: string) {
   return k8s_username;
 }
 export const getUserCr = async (kc: KubeConfig, name: string) => {
-  const resourceKind = 'User';
   const group = 'user.sealos.io';
   const version = 'v1';
   const plural = 'users';
@@ -284,7 +279,7 @@ export const getUserKubeconfig = async (uid: string, k8s_username: string) => {
   return kubeconfig;
 };
 // for create workspace
-export const getTeamKubeconfig = async (k8s_username: string, owner: string) => {
+export const getTeamCr = async (k8s_username: string, owner: string) => {
   const kc = K8sApiDefault();
   const group = 'user.sealos.io';
   const version = 'v1';
@@ -297,10 +292,7 @@ export const getTeamKubeconfig = async (k8s_username: string, owner: string) => 
     version,
     plural,
     fn(_, cur) {
-      return (
-        cur?.metadata?.labels?.['user.sealos.io/type'] === 'Group' &&
-        cur?.metadata?.annotations?.['user.sealos.io/owner'] === owner
-      );
+      return cur?.metadata?.annotations?.['user.sealos.io/owner'] === owner;
     },
     name: k8s_username
   });
@@ -311,7 +303,7 @@ export const setUserTeamDelete = async (k8s_username: string) => {
   const kc = K8sApiDefault();
   const group = 'user.sealos.io';
   const version = 'v1';
-  const plural = 'users';
+  const plural = 'usernamespaces';
 
   await removeUserTeam(kc, k8s_username);
 

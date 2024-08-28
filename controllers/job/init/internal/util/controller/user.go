@@ -20,6 +20,7 @@ import (
 	"github.com/labring/sealos/controllers/job/init/internal/util/common"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -65,6 +66,22 @@ func newAdminUser(ctx context.Context, c client.Client) (*userv1.User, error) {
 	return u, nil
 }
 
+func newAdminWorkspace(ctx context.Context, c client.Client) (*userv1.UserNamespace, error) {
+	var us = &userv1.UserNamespace{}
+	us.SetName(DefaultAdminUserName)
+	if err := c.Get(ctx, client.ObjectKeyFromObject(us), us); client.IgnoreNotFound(err) != nil {
+		return nil, err
+	}
+	us.Spec.Creator = DefaultAdminUserName
+	us.SetOwnerReferences([]metav1.OwnerReference{})
+	if us.Annotations == nil {
+		us.Annotations = make(map[string]string, 0)
+	}
+	us.Annotations[userv1.UserAnnotationOwnerKey] = DefaultAdminUserName
+	us.Annotations[userv1.UserAnnotationCreatorKey] = DefaultAdminUserName
+	return us, nil
+}
+
 func PresetAdminUser(ctx context.Context) error {
 	c, err := newKubernetesClient()
 	if err != nil {
@@ -75,6 +92,16 @@ func PresetAdminUser(ctx context.Context) error {
 		return err
 	}
 	_, err = ctrl.CreateOrUpdate(ctx, c, adminUser, func() error {
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	adminWorkspace, err := newAdminWorkspace(ctx, c)
+	if err != nil {
+		return err
+	}
+	_, err = ctrl.CreateOrUpdate(ctx, c, adminWorkspace, func() error {
 		return nil
 	})
 	return err

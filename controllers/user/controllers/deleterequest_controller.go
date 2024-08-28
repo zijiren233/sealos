@@ -24,7 +24,6 @@ import (
 	"github.com/go-logr/logr"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
-	"github.com/labring/sealos/controllers/user/controllers/helper/config"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,7 +60,7 @@ func (r *DeleteRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *DeleteRequestReconciler) reconcile(ctx context.Context, request *userv1.DeleteRequest) (ctrl.Result, error) {
-	r.Logger.V(1).Info("start reconcile deleterequest", "name", request.Name, "user", request.Spec.User)
+	r.Logger.V(1).Info("start reconcile deleterequest", "name", request.Name, "user namespace", request.Spec.UserNamespace)
 	// count the time cost of handling the request
 	startTime := time.Now()
 	defer func() {
@@ -92,40 +91,25 @@ func (r *DeleteRequestReconciler) reconcile(ctx context.Context, request *userv1
 
 	// handle the request
 
-	// get user
-	user := userv1.User{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: request.Spec.User}, &user); err != nil {
-		r.Logger.Error(err, "get user error", "name", request.Spec.User)
-		r.Recorder.Eventf(request, corev1.EventTypeWarning, "GetUserError", "get user %s error: %s", request.Spec.User, err.Error())
+	// get userNs
+	userNs := userv1.UserNamespace{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: request.Spec.UserNamespace}, &userNs); err != nil {
+		r.Logger.Error(err, "get user namespace error", "name", request.Spec.UserNamespace)
+		r.Recorder.Eventf(request, corev1.EventTypeWarning, "GetUserNamespaceError", "get user namespace %s error: %s", request.Spec.UserNamespace, err.Error())
 		return ctrl.Result{}, err
 	}
 
-	// delete user if it is not labeled deleted
-	if !isUserDeleted(user) && !isGroupUser(user) {
-		r.Logger.Info("user is not deleted or not a group user", "name", user.Name)
-		r.Recorder.Eventf(request, corev1.EventTypeWarning, "UserNotDeleted", "user %s is not deleted or not a group user", user.Name)
+	// delete user namespace if it is not labeled deleted
+	if !isUserNamespaceDeleted(userNs) {
+		r.Logger.Info("user namespace is not deleted", "name", userNs.Name)
+		r.Recorder.Eventf(request, corev1.EventTypeWarning, "UserNotDeleted", "user namespace %s is not deleted or not a group user", userNs.Name)
 		return ctrl.Result{RequeueAfter: DeleteRequestRequeueDuration}, nil
 	}
 
-	// delete user
-	if err := r.Delete(ctx, &user); err != nil {
-		r.Logger.Error(err, "delete user error", "name", user.Name)
-		r.Recorder.Eventf(request, corev1.EventTypeWarning, "DeleteUserError", "delete user %s error: %s", user.Name, err.Error())
-		return ctrl.Result{}, err
-	}
-
-	// get namespace
-	ns := corev1.Namespace{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: config.GetUsersNamespace(user.Name)}, &ns); err != nil {
-		r.Logger.Error(err, "get ns error", "name", ns.Name)
-		r.Recorder.Eventf(request, corev1.EventTypeWarning, "GetNamespaceError", "get namespace %s error: %s", ns.Name, err.Error())
-		return ctrl.Result{}, err
-	}
-
-	// delete namespace
-	if err := r.Delete(ctx, &ns); err != nil {
-		r.Logger.Error(err, "delete ns error", "name", ns.Name)
-		r.Recorder.Eventf(request, corev1.EventTypeWarning, "DeleteNamespaceError", "delete namespace %s error: %s", ns.Name, err.Error())
+	// delete user namespace
+	if err := r.Delete(ctx, &userNs); err != nil {
+		r.Logger.Error(err, "delete user error", "name", userNs.Name)
+		r.Recorder.Eventf(request, corev1.EventTypeWarning, "DeleteUserError", "delete user namespace %s error: %s", userNs.Name, err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -200,12 +184,7 @@ func (r *DeleteRequestReconciler) updateRequestStatus(ctx context.Context, reque
 	return nil
 }
 
-// isUserDeleted returns true if the user is deleted
-func isUserDeleted(user userv1.User) bool {
+// isUserNamespaceDeleted returns true if the user is deleted
+func isUserNamespaceDeleted(user userv1.UserNamespace) bool {
 	return user.Labels["user.sealos.io/status"] == "Deleted"
-}
-
-// isGroupUser returns true if the user is a group user
-func isGroupUser(user userv1.User) bool {
-	return user.Labels["user.sealos.io/type"] == "Group"
 }

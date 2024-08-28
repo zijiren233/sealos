@@ -153,7 +153,7 @@ func (sac *ServiceAccountConfig) generatorKubeConfig(cfg *rest.Config, token str
 			ctx: {
 				Cluster:   sac.clusterName,
 				AuthInfo:  sac.user,
-				Namespace: config2.GetUsersNamespace(sac.user),
+				Namespace: config2.GetUserNamespace(sac.user),
 			},
 		},
 		AuthInfos: map[string]*api.AuthInfo{

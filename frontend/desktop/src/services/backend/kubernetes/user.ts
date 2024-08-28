@@ -128,7 +128,7 @@ export function CheckIsInCluster(): [boolean, string] {
   return [false, ''];
 }
 
-export function GetUserDefaultNameSpace(user: string): string {
+export function GetUserNamespace(user: string): string {
   return 'ns-' + user;
 }
 

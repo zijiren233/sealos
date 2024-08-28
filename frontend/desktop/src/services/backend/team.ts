@@ -55,14 +55,14 @@ const _applyRoleRequest =
     });
   };
 
-export const applyDeleteRequest = (user: string) => {
+export const applyDeleteUserTeam = (usernamespace: string) => {
   const kc = new KubeConfig();
   kc.loadFromDefault();
   const createCR = () =>
     ApplyYaml(
       kc,
       deleteRequestCrd({
-        user
+        usernamespace
       })
     );
   return new Promise((resolve, reject) => {

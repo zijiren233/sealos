@@ -22,7 +22,7 @@ import (
 
 // DeleteRequestSpec defines the desired state of DeleteRequest
 type DeleteRequestSpec struct {
-	User string `json:"user,omitempty"`
+	UserNamespace string `json:"usernamespace,omitempty"`
 }
 
 // DeleteRequestStatus defines the observed state of DeleteRequest

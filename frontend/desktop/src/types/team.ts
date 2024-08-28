@@ -60,7 +60,7 @@ type DeleteCRD = {
     name: string;
   };
   spec: {
-    user: string;
+    usernamespace: string;
   };
 };
 export const deleteRequestCrd = (props: DeleteCRD['spec']) => {
@@ -74,7 +74,7 @@ export const deleteRequestCrd = (props: DeleteCRD['spec']) => {
       name
     },
     spec: {
-      user: props.user
+      usernamespace: props.usernamespace
     }
   };
 

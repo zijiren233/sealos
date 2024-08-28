@@ -105,7 +105,7 @@ func (csr *CsrConfig) Apply(config *rest.Config, client client.Client) (*api.Con
 			ctx: {
 				Cluster:   csr.clusterName,
 				AuthInfo:  csr.user,
-				Namespace: config2.GetUsersNamespace(csr.user),
+				Namespace: config2.GetUserNamespace(csr.user),
 			},
 		},
 		AuthInfos: map[string]*api.AuthInfo{

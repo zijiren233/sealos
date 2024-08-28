@@ -134,6 +134,7 @@ type UserWorkspace struct {
 	HandlerUID   uuid.UUID `gorm:"column:handlerUid;type:uuid"`
 	Role         Role      `gorm:"type:Role;default:'DEVELOPER'::defaultdb.public.'Role';not null"`
 	Status       JoinStatus
+	IsPrivate    bool      `gorm:"column:isPrivate;type:boolean;not null"`
 	JoinAt       time.Time `gorm:"column:joinAt;type:timestamp(3) with time zone"`
 }
 
