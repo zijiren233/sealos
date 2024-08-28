@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	adminPassword   = hashPassword(env.GetEnvWithDefault(EnvAdminPassword, DefaultAdminPassword))
-	adminUserName   = env.GetEnvWithDefault(EnvAdminUserName, DefaultAdminUserName)
-	workspacePrefix = env.GetEnvWithDefault(EnvWorkspacePrefix, "ns-")
+	adminPassword = hashPassword(env.GetEnvWithDefault(EnvAdminPassword, DefaultAdminPassword))
+	adminUserName = env.GetEnvWithDefault(EnvAdminUserName, DefaultAdminUserName)
+	// workspacePrefix = env.GetEnvWithDefault(EnvWorkspacePrefix, "ns-")
 )
