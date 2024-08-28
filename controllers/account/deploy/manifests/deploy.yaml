@@ -1185,6 +1185,16 @@ rules:
   - watch
   - create
   - patch
+- apiGroups:
+  - user.sealos.io
+  resources:
+  - usernamespace
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
