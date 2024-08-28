@@ -67,6 +67,7 @@ export default function usePassword({
               }
               return;
             } else if (result?.code === 201) {
+              console.log('exit result:', result);
               setUserExist(!!result?.data?.exist);
               setPageState(1);
               if (!!data?.confimPassword) {
@@ -80,6 +81,7 @@ export default function usePassword({
                     semData,
                     bdVid
                   });
+                  console.log('region result:', regionResult);
                   if (!!regionResult?.data) {
                     setToken(regionResult.data.token);
                     const infoData = await UserInfo();
@@ -98,8 +100,7 @@ export default function usePassword({
                         realName: infoData.data?.info.realName || undefined,
                         userRestrictedLevel: infoData.data?.info.userRestrictedLevel || undefined
                       },
-                      // @ts-ignore
-                      kubeconfig: result.data.kubeconfig
+                      kubeconfig: regionResult.data.kubeconfig
                     });
                     await router.replace('/');
                   }
