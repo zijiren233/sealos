@@ -17,6 +17,7 @@ export const sessionConfig = async ({
   store.setToken(token);
   const infoData = await UserInfo();
   const payload = jwtDecode<AccessTokenPayload>(token);
+  console.log('session config: kubeconfig: ', kubeconfig);
   store.setSession({
     token: appToken,
     user: {

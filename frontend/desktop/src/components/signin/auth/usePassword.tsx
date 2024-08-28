@@ -61,6 +61,7 @@ export default function usePassword({
                 bdVid
               });
               if (!!result?.data) {
+                console.log('region token data:', result.data);
                 await sessionConfig(result.data);
                 await router.replace('/');
               }
