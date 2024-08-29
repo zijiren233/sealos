@@ -95,17 +95,17 @@ type AccountReconciler struct {
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	user := &userv1.User{}
+	userNamespace := &userv1.UserNamespace{}
 	owner := ""
-	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: req.Name}, user); err == nil {
-		if owner = user.Annotations[userv1.UserAnnotationOwnerKey]; owner == "" {
+	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: req.Name}, userNamespace); err == nil {
+		if owner = userNamespace.Annotations[userv1.UserAnnotationOwnerKey]; owner == "" {
 			return ctrl.Result{}, fmt.Errorf("user owner is empty")
 		}
 		// This is only used to monitor and initialize user resource creation data,
 		// determine the resource quota created by the owner user and the resource quota initialized by the account user,
 		// and only the resource quota created by the team user
-		_, err = r.syncAccount(ctx, owner, "ns-"+user.Name)
-		if errors.Is(err, gorm.ErrRecordNotFound) && user.CreationTimestamp.Add(20*24*time.Hour).Before(time.Now()) {
+		_, err = r.syncAccount(ctx, owner, "ns-"+userNamespace.Name)
+		if errors.Is(err, gorm.ErrRecordNotFound) && userNamespace.CreationTimestamp.Add(20*24*time.Hour).Before(time.Now()) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -171,7 +171,7 @@ func (r *AccountReconciler) SetupWithManager(mgr ctrl.Manager, rateOpts controll
 	r.Logger = ctrl.Log.WithName("account_controller")
 	r.AccountSystemNamespace = env.GetEnvWithDefault(ACCOUNTNAMESPACEENV, DEFAULTACCOUNTNAMESPACE)
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&userv1.User{}, builder.WithPredicates(OnlyCreatePredicate{})).
+		For(&userv1.UserNamespace{}, builder.WithPredicates(OnlyCreatePredicate{})).
 		WithOptions(rateOpts).
 		Complete(r)
 }
