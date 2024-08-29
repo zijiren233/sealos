@@ -36,3 +36,21 @@ rules:
   - users/status
   verbs:
   - get
+- apiGroups:
+  - user.sealos.io
+  resources:
+  - usernamespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - user.sealos.io
+  resources:
+  - usernamespaces/status
+  verbs:
+  - get

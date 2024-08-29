@@ -283,7 +283,7 @@ export const getTeamCr = async (k8s_username: string, owner: string) => {
   const kc = K8sApiDefault();
   const group = 'user.sealos.io';
   const version = 'v1';
-  const plural = 'users';
+  const plural = 'usernamespaces';
   await setUserTeamCreate(kc, k8s_username, owner);
 
   let body = await watchCustomClusterObject({

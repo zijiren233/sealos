@@ -10,6 +10,12 @@ rules:
     resources: ["users/status"]
     verbs: ["list", "get", "create", "update", "patch", "watch"]
   - apiGroups: ["user.sealos.io"]
+    resources: ["usernamespaces"]
+    verbs: ["list", "get", "create", "update", "patch", "watch"]
+  - apiGroups: ["user.sealos.io"]
+    resources: ["usernamespaces/status"]
+    verbs: ["list", "get", "create", "update", "patch", "watch"]
+  - apiGroups: ["user.sealos.io"]
     resources: ["operationrequests", "deleterequests"]
     verbs: ["create","get"]
  
