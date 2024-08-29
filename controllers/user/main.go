@@ -137,6 +137,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.UserNamespaceReconciler{}).SetupWithManager(mgr, rateLimiterOptions, minRequeueDuration, maxRequeueDuration); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "UserNamespace")
+		os.Exit(1)
+	}
+
 	if os.Getenv("DISABLE_WEBHOOKS") == "true" {
 		setupLog.Info("disable all webhooks")
 	} else {

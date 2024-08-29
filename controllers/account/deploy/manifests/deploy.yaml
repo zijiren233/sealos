@@ -1188,7 +1188,7 @@ rules:
 - apiGroups:
   - user.sealos.io
   resources:
-  - usernamespace
+  - usernamespaces
   verbs:
   - get
   - list
