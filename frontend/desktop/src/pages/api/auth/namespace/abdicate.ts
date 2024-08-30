@@ -22,12 +22,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return jsonRes(res, { code: 400, message: 'targetUserId is invaild' });
     if (targetUserCrUid === payload.userCrUid)
       return jsonRes(res, { code: 409, message: "the targetUserId can't be self" });
-    const ownWorkspaceCount = await prisma.userWorkspace.count({
+    const userWorkspaceCount = await prisma.userWorkspace.count({
       where: {
         userCrUid: payload.userCrUid
       }
     });
-    if (ownWorkspaceCount <= 1)
+    if (userWorkspaceCount <= 1)
       return jsonRes(res, { code: 409, message: "you can't abdicate the last workspace" });
     // 校检自身user
     const workspaceToRegionUsers = await prisma.userWorkspace.findMany({

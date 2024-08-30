@@ -21,6 +21,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         code: 403,
         message: 'you can not delete the namespace which you are in'
       });
+    if (payload.workspaceId === 'ns-admin') {
+      return jsonRes(res, { code: 403, message: 'ns-admin cannot be deleted' });
+    }
+    const userWorkspaceCount = await prisma.userWorkspace.count({
+      where: {
+        userCrUid: payload.userCrUid
+      }
+    });
+    if (userWorkspaceCount <= 1)
+      return jsonRes(res, { code: 409, message: "you can't delete the last workspace" });
     const queryResult = await prisma.userWorkspace.findUnique({
       where: {
         workspaceUid_userCrUid: {
