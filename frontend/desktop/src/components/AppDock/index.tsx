@@ -3,21 +3,22 @@ import useAppStore, { AppInfo } from '@/stores/app';
 import { useConfigStore } from '@/stores/config';
 import { useDesktopConfigStore } from '@/stores/desktopConfig';
 import { APPTYPE, TApp } from '@/types';
+import { I18nCommonKey } from '@/types/i18next';
 import { Box, Center, Flex, Image } from '@chakra-ui/react';
-import { MouseEvent, useContext, useMemo, useState } from 'react';
+import { useTranslation } from 'next-i18next';
+import { MouseEvent, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Menu, useContextMenu } from 'react-contexify';
 import { ChevronDownIcon } from '../icons';
+import CustomTooltip from './CustomTooltip';
 import styles from './index.module.css';
-import { useTranslation } from 'next-i18next';
 
 const APP_DOCK_MENU_ID = 'APP_DOCK_MENU_ID';
 
 export default function AppDock() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     installedApps: apps,
     runningInfo,
-    setToHighestLayerById,
     currentAppPid,
     openApp,
     switchAppById,
@@ -26,7 +27,10 @@ export default function AppDock() {
   } = useAppStore();
   const logo = useConfigStore().layoutConfig?.logo;
   const moreAppsContent = useContext(MoreAppsContext);
-  const [isNavbarVisible, setNavbarVisible] = useState(true);
+  const { isNavbarVisible, toggleNavbarVisibility, getTransitionValue } = useDesktopConfigStore();
+  const [isMouseOverDock, setIsMouseOverDock] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+
   const { show } = useContextMenu({
     id: APP_DOCK_MENU_ID
   });
@@ -39,7 +43,7 @@ export default function AppDock() {
         name: 'home',
         icon: '/icons/home.svg',
         zIndex: 99999,
-        isShow: true,
+        isShow: false,
         pid: -9,
         size: 'maxmin',
         cacheSize: 'maxmin',
@@ -106,40 +110,76 @@ export default function AppDock() {
       event: e,
       position: {
         // @ts-ignore
-        x: '60px',
+        x: '244px',
         // @ts-ignore
-        y: '-114px'
+        y: '-34px'
       }
     });
   };
 
-  const transitionValue = 'transform 200ms ease-in-out, opacity 200ms ease-in-out';
+  useEffect(() => {
+    if (!isMouseOverDock) {
+      const hasMaximizedApp = runningInfo.some((app) => app.size === 'maximize');
+      toggleNavbarVisibility(!hasMaximizedApp);
+    }
+  }, [isMouseOverDock, runningInfo, toggleNavbarVisibility]);
+
+  const handleMouseEnter = () => {
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setIsMouseOverDock(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutRef.current = window.setTimeout(() => {
+      setIsMouseOverDock(false);
+    }, 500);
+  };
 
   return (
-    <Box position="absolute" left="50%" bottom={'4px'} transform="translateX(-50%)" zIndex={'9999'}>
-      <Center
-        width={'48px'}
-        height={'16px'}
-        position={'absolute'}
-        color={'white'}
-        transition={transitionValue}
-        cursor={'pointer'}
-        bg="rgba(220, 220, 224, 0.3)"
-        backdropFilter="blur(80px) saturate(150%)"
-        boxShadow={
-          '0px 0px 20px -4px rgba(12, 26, 67, 0.25), 0px 0px 1px 0px rgba(24, 43, 100, 0.25)'
-        }
-        borderTopRadius={'4px'}
-        top={'-80px'}
-        transform={isNavbarVisible ? 'translate(-50%, 0)' : 'translate(-50%, 64px)'}
-        will-change="transform, opacity"
-        onClick={() => setNavbarVisible((prev) => !prev)}
-      >
-        <ChevronDownIcon
-          transform={isNavbarVisible ? 'rotate(0deg)' : 'rotate(180deg)'}
-          transition="transform 0.3s ease-in-out"
-        />
-      </Center>
+    <Flex
+      flexDirection={'column'}
+      alignItems={'center'}
+      position="absolute"
+      p={'16px'}
+      pb={'0px'}
+      left="50%"
+      bottom={'4px'}
+      zIndex={'1000'}
+      transition={getTransitionValue()}
+      transform={isNavbarVisible ? 'translate(-50%, 0)' : 'translate(-50%, 64px)'}
+      will-change="transform, opacity"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {runningInfo.length > 0 && runningInfo.some((app) => app.size === 'maximize') && (
+        <Center
+          width={'48px'}
+          height={'16px'}
+          color={'white'}
+          transition={getTransitionValue()}
+          cursor={'pointer'}
+          bg="rgba(220, 220, 224, 0.3)"
+          backdropFilter="blur(80px) saturate(150%)"
+          boxShadow={
+            '0px 0px 20px -4px rgba(12, 26, 67, 0.25), 0px 0px 1px 0px rgba(24, 43, 100, 0.25)'
+          }
+          borderTopRadius={'4px'}
+          transform={isNavbarVisible ? 'translateY(0)' : 'translateY(-4px)'}
+          will-change="transform, opacity"
+          onClick={() => {
+            toggleNavbarVisibility();
+          }}
+        >
+          <ChevronDownIcon
+            transform={isNavbarVisible ? 'rotate(0deg)' : 'rotate(180deg)'}
+            transition="transform 200ms ease-in-out"
+          />
+        </Center>
+      )}
+
       <Flex
         onContextMenu={(e) => displayMenu(e)}
         borderRadius="12px"
@@ -154,50 +194,54 @@ export default function AppDock() {
         gap={'12px'}
         userSelect={'none'}
         px={'12px'}
-        transition={transitionValue}
-        opacity={isNavbarVisible ? 1 : 0}
-        position="absolute"
-        top={'-64px'}
-        transform={isNavbarVisible ? 'translate(-50%, 0)' : 'translate(-50%, 68px)'}
-        will-change="transform, opacity"
-        overflow="hidden"
       >
         {AppMenuLists.map((item: AppInfo, index: number) => {
           return (
-            <Flex
-              flexDirection={'column'}
-              alignItems={'center'}
-              cursor={'pointer'}
+            <CustomTooltip
+              placement="top"
               key={item?.name}
-              pt={'6px'}
-              pb={'2px'}
-              onClick={(e) => handleNavItem(e, item)}
+              label={
+                item?.i18n?.[i18n?.language]?.name
+                  ? item?.i18n?.[i18n?.language]?.name
+                  : t(item?.name as I18nCommonKey)
+              }
             >
-              <Center
-                w="40px"
-                h="40px"
-                borderRadius={'8px'}
-                bg={'rgba(255, 255, 255, 0.85)'}
-                backdropFilter={'blur(25px)'}
-                boxShadow={'0px 1.167px 2.333px 0px rgba(0, 0, 0, 0.20)'}
+              <Flex
+                flexDirection={'column'}
+                alignItems={'center'}
+                cursor={'pointer'}
+                key={item?.name}
+                pt={'6px'}
+                pb={'2px'}
+                onClick={(e) => handleNavItem(e, item)}
               >
-                <Image
-                  src={item?.icon}
-                  fallbackSrc={logo || '/logo.svg'}
-                  alt={item?.name}
-                  w="32px"
-                  h="32px"
-                />
-              </Center>
-              <Box
-                opacity={currentAppPid === item.pid ? 1 : 0}
-                mt={'6px'}
-                width={'4px'}
-                height={'4px'}
-                borderRadius={'full'}
-                bg={'rgba(7, 27, 65, 0.50)'}
-              ></Box>
-            </Flex>
+                <Center
+                  w="40px"
+                  h="40px"
+                  borderRadius={'8px'}
+                  bg={'rgba(255, 255, 255, 0.85)'}
+                  backdropFilter={'blur(25px)'}
+                  boxShadow={'0px 1.167px 2.333px 0px rgba(0, 0, 0, 0.20)'}
+                >
+                  <Image
+                    src={item?.icon}
+                    fallbackSrc={logo || '/logo.svg'}
+                    alt={item?.name}
+                    w="32px"
+                    h="32px"
+                    draggable={false}
+                  />
+                </Center>
+                <Box
+                  opacity={item?.isShow ? 1 : 0}
+                  mt={'6px'}
+                  width={'4px'}
+                  height={'4px'}
+                  borderRadius={'full'}
+                  bg={'rgba(7, 27, 65, 0.50)'}
+                ></Box>
+              </Flex>
+            </CustomTooltip>
           );
         })}
       </Flex>
@@ -213,11 +257,11 @@ export default function AppDock() {
             onClick={toggleShape}
             borderRadius={'4px'}
           >
-            {t('Switching Disc')}
+            {t('common:switching_disc')}
           </Box>
           <div className={styles.arrow}></div>
         </>
       </Menu>
-    </Box>
+    </Flex>
   );
 }

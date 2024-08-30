@@ -44,7 +44,6 @@ import (
 
 	accountv1 "github.com/labring/sealos/controllers/account/api/v1"
 	"github.com/labring/sealos/controllers/pkg/database"
-	"github.com/labring/sealos/controllers/pkg/pay"
 	"github.com/labring/sealos/controllers/pkg/resources"
 	pkgtypes "github.com/labring/sealos/controllers/pkg/types"
 	"github.com/labring/sealos/controllers/pkg/utils/env"
@@ -58,8 +57,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -98,11 +95,6 @@ type AccountReconciler struct {
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	//It should not stop the normal process for the failure to delete the payment
-	// delete payments that exist for more than 5 minutes
-	if err := r.DeletePayment(ctx); err != nil {
-		r.Logger.Error(err, "delete payment failed")
-	}
 	user := &userv1.User{}
 	owner := ""
 	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: req.Name}, user); err == nil {
@@ -113,80 +105,12 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// determine the resource quota created by the owner user and the resource quota initialized by the account user,
 		// and only the resource quota created by the team user
 		_, err = r.syncAccount(ctx, owner, "ns-"+user.Name)
+		if errors.Is(err, gorm.ErrRecordNotFound) && user.CreationTimestamp.Add(20*24*time.Hour).Before(time.Now()) {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
 	} else if client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, err
-	}
-
-	payment := &accountv1.Payment{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: req.Name}, payment); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	if payment.Spec.UserID == "" || payment.Spec.Amount == 0 {
-		return ctrl.Result{}, fmt.Errorf("payment is invalid: %v", payment)
-	}
-	if payment.Status.TradeNO == "" {
-		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 300}, nil
-	}
-	if payment.Status.Status == pay.PaymentSuccess {
-		return ctrl.Result{}, nil
-	}
-
-	account, err := r.syncAccount(ctx, getUsername(payment.Spec.UserID), payment.Namespace)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("get account failed: %v", err)
-	}
-
-	// get payment handler
-	payHandler, err := pay.NewPayHandler(payment.Spec.PaymentMethod)
-	if err != nil {
-		r.Logger.Error(err, "get payment handler failed")
-		return ctrl.Result{}, err
-	}
-	// get payment details(status, amount)
-	// TODO The GetPaymentDetails may cause issues when using Stripe
-	status, orderAmount, err := payHandler.GetPaymentDetails(payment.Status.TradeNO)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("query order failed: %v", err)
-	}
-	r.Logger.V(1).Info("query order details", "orderStatus", status, "orderAmount", orderAmount)
-	switch status {
-	case pay.PaymentSuccess:
-		//1¥ = 100WechatPayAmount; 1 WechatPayAmount = 10000 SealosAmount
-		payAmount := orderAmount * 10000
-		gift, err := r.getAmountWithRates(payAmount, account)
-		if err != nil {
-			r.Logger.Error(err, "get gift error")
-		}
-		if err = r.AccountV2.Payment(&pkgtypes.Payment{
-			PaymentRaw: pkgtypes.PaymentRaw{
-				UserUID:         account.UserUID,
-				Amount:          payAmount,
-				Gift:            gift,
-				CreatedAt:       payment.CreationTimestamp.Time,
-				RegionUserOwner: owner,
-				Method:          payment.Spec.PaymentMethod,
-				TradeNO:         payment.Status.TradeNO,
-				CodeURL:         payment.Status.CodeURL,
-			},
-		}); err != nil {
-			r.Logger.Error(err, "save payment failed", "payment", payment)
-			return ctrl.Result{}, nil
-		}
-		payment.Status.Status = pay.PaymentSuccess
-		if err := r.Status().Update(ctx, payment); err != nil {
-			return ctrl.Result{}, fmt.Errorf("update payment failed: %v", err)
-		}
-
-	case pay.PaymentProcessing, pay.PaymentNotPaid:
-		return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
-	case pay.PaymentFailed, pay.PaymentExpired:
-		if err := r.Delete(ctx, payment); err != nil {
-			return ctrl.Result{}, fmt.Errorf("delete payment failed: %v", err)
-		}
-		return ctrl.Result{}, nil
-	default:
-		return ctrl.Result{}, fmt.Errorf("unknown status: %v", err)
 	}
 
 	return ctrl.Result{}, nil
@@ -204,10 +128,7 @@ func (r *AccountReconciler) syncAccount(ctx context.Context, owner string, userN
 	}
 	account, err := r.AccountV2.NewAccount(&pkgtypes.UserQueryOpts{Owner: owner})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to create %s account: %v", owner, err)
+		return nil, err
 	}
 	return account, nil
 }
@@ -245,53 +166,12 @@ func (r *AccountReconciler) adaptEphemeralStorageLimitRange(ctx context.Context,
 	})
 }
 
-// DeletePayment delete payments that exist for more than 5 minutes
-func (r *AccountReconciler) DeletePayment(ctx context.Context) error {
-	payments := &accountv1.PaymentList{}
-	err := r.List(ctx, payments)
-	if err != nil {
-		return err
-	}
-	for _, payment := range payments.Items {
-		//get payment handler
-		payHandler, err := pay.NewPayHandler(payment.Spec.PaymentMethod)
-		if err != nil {
-			r.Logger.Error(err, "get payment handler failed")
-			return err
-		}
-		//delete payment if it is exist for more than 5 minutes
-		if time.Since(payment.CreationTimestamp.Time) > time.Minute*5 {
-			if payment.Status.TradeNO != "" {
-				status, amount, err := payHandler.GetPaymentDetails(payment.Status.TradeNO)
-				if err != nil {
-					r.Logger.Error(err, "get payment details failed")
-				}
-				if status == pay.PaymentSuccess {
-					if payment.Status.Status != pay.PaymentSuccess {
-						continue
-					}
-					r.Logger.Info("payment success, post delete payment cr", "payment", payment, "amount", amount)
-				}
-				// expire session
-				if err = payHandler.ExpireSession(payment.Status.TradeNO); err != nil {
-					r.Logger.Error(err, "cancel payment failed")
-				}
-			}
-			if err := r.Delete(ctx, &payment); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccountReconciler) SetupWithManager(mgr ctrl.Manager, rateOpts controller.Options) error {
 	r.Logger = ctrl.Log.WithName("account_controller")
 	r.AccountSystemNamespace = env.GetEnvWithDefault(ACCOUNTNAMESPACEENV, DEFAULTACCOUNTNAMESPACE)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&userv1.User{}, builder.WithPredicates(OnlyCreatePredicate{})).
-		Watches(&source.Kind{Type: &accountv1.Payment{}}, &handler.EnqueueRequestForObject{}).
 		WithOptions(rateOpts).
 		Complete(r)
 }
@@ -352,49 +232,49 @@ func parseConfigList(s string, list interface{}, configName string) error {
 	return nil
 }
 
-func GetUserOwner(user *userv1.User) string {
-	own := user.Annotations[userv1.UserAnnotationOwnerKey]
-	if own == "" {
-		return user.Name
-	}
-	return own
-}
+//func GetUserOwner(user *userv1.User) string {
+//	own := user.Annotations[userv1.UserAnnotationOwnerKey]
+//	if own == "" {
+//		return user.Name
+//	}
+//	return own
+//}
 
 const BaseUnit = 1_000_000
 
-func (r *AccountReconciler) getAmountWithRates(amount int64, account *pkgtypes.Account) (amt int64, err error) {
-	//userActivities, err := pkgtypes.ParseUserActivities(account.Annotations)
-	//if err != nil {
-	//	return nil, 0, fmt.Errorf("parse user activities failed: %w", err)
-	//}
-	//
-	//rechargeDiscount := pkgtypes.RechargeDiscount{
-	//	DiscountSteps: r.RechargeStep,
-	//	DiscountRates: r.RechargeRatio,
-	//}
-	//if len(userActivities) > 0 {
-	//	if activityType, phase, _ := pkgtypes.GetUserActivityDiscount(r.Activities, &userActivities); phase != nil {
-	//		if len(phase.RechargeDiscount.DiscountSteps) > 0 {
-	//			rechargeDiscount.DiscountSteps = phase.RechargeDiscount.DiscountSteps
-	//			rechargeDiscount.DiscountRates = phase.RechargeDiscount.DiscountRates
-	//		}
-	//		rechargeDiscount.SpecialDiscount = phase.RechargeDiscount.SpecialDiscount
-	//		rechargeDiscount = phase.RechargeDiscount
-	//		currentPhase := userActivities[activityType].Phases[userActivities[activityType].CurrentPhase]
-	//		anno = pkgtypes.SetUserPhaseRechargeTimes(account.Annotations, activityType, currentPhase.Name, currentPhase.RechargeNums+1)
-	//	}
-	//}
-	//return anno, getAmountWithDiscount(amount, rechargeDiscount), nil
-
-	discount, err := r.AccountV2.GetUserAccountRechargeDiscount(&pkgtypes.UserQueryOpts{UID: account.UserUID})
-	if err != nil {
-		return 0, fmt.Errorf("get user %s account recharge discount failed: %w", account.UserUID, err)
-	}
-	if discount == nil || discount.DiscountSteps == nil || discount.DiscountRates == nil {
-		return getAmountWithDiscount(amount, r.DefaultDiscount), nil
-	}
-	return getAmountWithDiscount(amount, *discount), nil
-}
+//func (r *AccountReconciler) getAmountWithRates(amount int64, account *pkgtypes.Account) (amt int64, err error) {
+//	//userActivities, err := pkgtypes.ParseUserActivities(account.Annotations)
+//	//if err != nil {
+//	//	return nil, 0, fmt.Errorf("parse user activities failed: %w", err)
+//	//}
+//	//
+//	//rechargeDiscount := pkgtypes.RechargeDiscount{
+//	//	DiscountSteps: r.RechargeStep,
+//	//	DiscountRates: r.RechargeRatio,
+//	//}
+//	//if len(userActivities) > 0 {
+//	//	if activityType, phase, _ := pkgtypes.GetUserActivityDiscount(r.Activities, &userActivities); phase != nil {
+//	//		if len(phase.RechargeDiscount.DiscountSteps) > 0 {
+//	//			rechargeDiscount.DiscountSteps = phase.RechargeDiscount.DiscountSteps
+//	//			rechargeDiscount.DiscountRates = phase.RechargeDiscount.DiscountRates
+//	//		}
+//	//		rechargeDiscount.SpecialDiscount = phase.RechargeDiscount.SpecialDiscount
+//	//		rechargeDiscount = phase.RechargeDiscount
+//	//		currentPhase := userActivities[activityType].Phases[userActivities[activityType].CurrentPhase]
+//	//		anno = pkgtypes.SetUserPhaseRechargeTimes(account.Annotations, activityType, currentPhase.Name, currentPhase.RechargeNums+1)
+//	//	}
+//	//}
+//	//return anno, getAmountWithDiscount(amount, rechargeDiscount), nil
+//
+//	discount, err := r.AccountV2.GetUserAccountRechargeDiscount(&pkgtypes.UserQueryOpts{UID: account.UserUID})
+//	if err != nil {
+//		return 0, fmt.Errorf("get user %s account recharge discount failed: %w", account.UserUID, err)
+//	}
+//	if discount == nil || discount.DiscountSteps == nil || discount.DiscountRates == nil {
+//		return getAmountWithDiscount(amount, r.DefaultDiscount), nil
+//	}
+//	return getAmountWithDiscount(amount, *discount), nil
+//}
 
 func getAmountWithDiscount(amount int64, discount pkgtypes.RechargeDiscount) int64 {
 	if discount.SpecialDiscount != nil && discount.SpecialDiscount[amount/BaseUnit] != 0 {

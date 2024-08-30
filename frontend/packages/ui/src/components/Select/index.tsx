@@ -7,7 +7,8 @@ import {
   Button,
   useDisclosure,
   useOutsideClick,
-  MenuButton
+  MenuButton,
+  Flex
 } from '@chakra-ui/react';
 import type { ButtonProps } from '@chakra-ui/react';
 import { ChevronDownIcon } from '@chakra-ui/icons';
@@ -68,7 +69,7 @@ const MySelect = (
           ref={ref}
           display={'flex'}
           alignItems={'center'}
-          justifyContent={'space-between'}
+          justifyContent={'center'}
           border={'1px solid #E8EBF0'}
           borderRadius={'md'}
           fontSize={'12px'}
@@ -93,15 +94,7 @@ const MySelect = (
               })}
           {...props}
         >
-          {activeMenu ? (
-            <>
-              <Box>{activeMenu.label}</Box>
-            </>
-          ) : (
-            <>
-              <Box>{placeholder}</Box>
-            </>
-          )}
+          <Flex justifyContent={'flex-start'}>{activeMenu ? activeMenu.label : placeholder}</Flex>
         </MenuButton>
 
         <MenuList
@@ -137,6 +130,7 @@ const MySelect = (
                 bg: 'rgba(17, 24, 36, 0.05)',
                 color: 'brightBlue.600'
               }}
+              p={'6px'}
               onClick={() => {
                 if (onchange && value !== item.value) {
                   onchange(item.value);

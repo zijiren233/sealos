@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
 	"github.com/minio/madmin-go/v3"
 
 	v1 "github.com/labring/sealos/controllers/account/api/v1"
@@ -36,6 +38,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	objectstoragev1 "github/labring/sealos/controllers/objectstorage/api/v1"
+
+	kbv1alpha1 "github.com/apecloud/kubeblocks/apis/apps/v1alpha1"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -132,7 +136,7 @@ func (r *NamespaceReconciler) SuspendUserResource(ctx context.Context, namespace
 	// suspend pod: deploy pod && clone unmanaged pod
 	// delete infra cr
 	pipelines := []func(context.Context, string) error{
-		//r.suspendKBCluster,
+		r.suspendKBCluster,
 		r.suspendOrphanPod,
 		r.limitResourceQuotaCreate,
 		r.deleteControlledPod,
@@ -190,28 +194,32 @@ func GetLimit0ResourceQuota(namespace string) *corev1.ResourceQuota {
 	return &quota
 }
 
-//func (r *NamespaceReconciler) suspendKBCluster(ctx context.Context, namespace string) error {
-//	kbClusterList := kbv1alpha1.ClusterList{}
-//	if err := r.Client.List(ctx, &kbClusterList, client.InNamespace(namespace)); err != nil {
-//		return err
-//	}
-//	for _, kbCluster := range kbClusterList.Items {
-//		if kbCluster.Status.Phase != kbv1alpha1.RunningClusterPhase {
-//			continue
-//		}
-//		ops := kbv1alpha1.OpsRequest{}
-//		ops.Namespace = kbCluster.Namespace
-//		ops.ObjectMeta.Name = "stop-" + kbCluster.Name + "-" + time.Now().Format("2006-01-02-15")
-//		ops.Spec.TTLSecondsAfterSucceed = 1
-//		ops.Spec.ClusterRef = kbCluster.Name
-//		ops.Spec.Type = "Stop"
-//		err := r.Client.Create(ctx, &ops)
-//		if err != nil {
-//			r.Log.Error(err, "create ops request failed", "ops", ops.Name, "namespace", ops.Namespace)
-//		}
-//	}
-//	return nil
-//}
+func (r *NamespaceReconciler) suspendKBCluster(ctx context.Context, namespace string) error {
+	kbClusterList := kbv1alpha1.ClusterList{}
+	if err := r.Client.List(ctx, &kbClusterList, client.InNamespace(namespace)); err != nil {
+		return err
+	}
+	for _, kbCluster := range kbClusterList.Items {
+		if kbCluster.Status.Phase == kbv1alpha1.StoppedClusterPhase || kbCluster.Status.Phase == kbv1alpha1.StoppingClusterPhase {
+			continue
+		}
+		ops := kbv1alpha1.OpsRequest{}
+		ops.Namespace = kbCluster.Namespace
+		ops.ObjectMeta.Name = "stop-" + kbCluster.Name + "-" + time.Now().Format("2006-01-02-15")
+		ops.Spec.TTLSecondsAfterSucceed = 1
+		abort := int32(60 * 60)
+		ops.Spec.TTLSecondsBeforeAbort = &abort
+		ops.Spec.ClusterRef = kbCluster.Name
+		ops.Spec.Type = "Stop"
+		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, &ops, func() error {
+			return nil
+		})
+		if err != nil {
+			r.Log.Error(err, "create ops request failed", "ops", ops.Name, "namespace", ops.Namespace)
+		}
+	}
+	return nil
+}
 
 func (r *NamespaceReconciler) suspendOrphanPod(ctx context.Context, namespace string) error {
 	podList := corev1.PodList{}
@@ -315,7 +323,7 @@ func (r *NamespaceReconciler) resumePod(ctx context.Context, namespace string) e
 
 func (r *NamespaceReconciler) recreatePod(ctx context.Context, oldPod corev1.Pod, newPod *corev1.Pod) error {
 	list := corev1.PodList{}
-	watcher, err := r.Client.Watch(ctx, &list)
+	watcher, err := r.Client.Watch(ctx, &list, client.InNamespace(oldPod.Namespace))
 	if err != nil {
 		return fmt.Errorf("failed to start watch stream for pod %s: %w", oldPod.Name, err)
 	}
