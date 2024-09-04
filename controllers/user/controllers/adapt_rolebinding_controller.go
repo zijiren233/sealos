@@ -20,10 +20,13 @@ import (
 	"context"
 
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 
 	v1 "k8s.io/api/rbac/v1"
+
+	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/go-logr/logr"
@@ -53,11 +56,21 @@ func (r *AdaptRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if rolebinding.Subjects[0].Namespace != config.GetUserSystemNamespace() {
+		userName := rolebinding.GetAnnotations()[userAnnotationOwnerKey]
+		user := &userv1.User{}
+		if err := r.Get(ctx, client.ObjectKey{Name: userName}, user); err != nil {
+			r.Logger.Error(err, "get user failed")
+			return ctrl.Result{}, err
+		}
 		appendSubject := rolebinding.Subjects[0].DeepCopy()
 		appendSubject.Namespace = config.GetUserSystemNamespace()
 		rolebinding.Subjects = append(rolebinding.Subjects, *appendSubject)
 		if err := r.Update(ctx, rolebinding); err != nil {
 			r.Logger.Error(err, "update rolebinding failed")
+			return ctrl.Result{}, err
+		}
+		if err := controllerutil.SetControllerReference(user, rolebinding, r.Scheme); err != nil {
+			r.Logger.Error(err, "set controller reference failed")
 			return ctrl.Result{}, err
 		}
 	}
@@ -114,7 +127,7 @@ func isWorkspaceObject(obj client.Object) bool {
 	}
 
 	for _, sub := range rolebinding.Subjects {
-		if sub.Kind == config.GetUserSystemNamespace() {
+		if sub.Namespace == config.GetUserSystemNamespace() {
 			return false
 		}
 	}
