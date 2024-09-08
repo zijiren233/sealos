@@ -59,10 +59,30 @@ export class DeleteUserCrJob implements CronJobStatus {
         })
       }
     });
-    await prisma.userWorkspace.deleteMany({
-      where: {
-        userCrUid: userCr.uid
+
+    await prisma.$transaction(async (prisma) => {
+      const privateWorkspace = await prisma.userWorkspace.findFirst({
+        where: {
+          userCrUid: userCr.uid,
+          isPrivate: true
+        },
+        select: {
+          workspaceUid: true
+        }
+      });
+      if (!privateWorkspace || !privateWorkspace.workspaceUid) {
+        throw new Error('Private workspace not found for the user.');
       }
+      await prisma.userWorkspace.deleteMany({
+        where: {
+          workspaceUid: privateWorkspace.workspaceUid
+        }
+      });
+      await prisma.userWorkspace.deleteMany({
+        where: {
+          userCrUid: userCr.uid
+        }
+      });
     });
   }
   canCommit() {
