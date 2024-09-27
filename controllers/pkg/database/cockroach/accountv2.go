@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"gorm.io/gorm/clause"
+
 	"gorm.io/gorm/logger"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -231,7 +233,7 @@ func (c *Cockroach) GetTransfer(ops *types.GetTransfersReq) (*types.GetTransfers
 
 func (c *Cockroach) performTransferQuery(ops *types.GetTransfersReq, limit, offset int, start, end time.Time, transfers *[]types.Transfer, count *int64) error {
 	var err error
-	query := c.DB.Limit(limit).Offset(offset).
+	query := c.DB.Model(&types.Transfer{}).Limit(limit).Offset(offset).
 		Where("created_at BETWEEN ? AND ?", start, end)
 	countQuery := c.DB.Model(&types.Transfer{}).
 		Where("created_at BETWEEN ? AND ?", start, end)
@@ -243,13 +245,13 @@ func (c *Cockroach) performTransferQuery(ops *types.GetTransfersReq, limit, offs
 	} else {
 		switch ops.Type {
 		case types.TypeTransferIn:
-			userCondition = `"toUserUid" = ? AND "toUserId" = ?`
+			userCondition = `"toUserUid" = ? OR "toUserId" = ?`
 			args = append(args, ops.UID, ops.ID)
 		case types.TypeTransferOut:
-			userCondition = `"fromUserUid" = ? AND "fromUserId" = ?`
+			userCondition = `"fromUserUid" = ? OR "fromUserId" = ?`
 			args = append(args, ops.UID, ops.ID)
 		default:
-			userCondition = `("fromUserUid" = ? AND "fromUserId" = ?) OR ("toUserUid" = ? AND "toUserId" = ?)`
+			userCondition = `"fromUserUid" = ? OR "fromUserId" = ? OR "toUserUid" = ? OR "toUserId" = ?`
 			args = append(args, ops.UID, ops.ID, ops.UID, ops.ID)
 		}
 	}
@@ -257,6 +259,7 @@ func (c *Cockroach) performTransferQuery(ops *types.GetTransfersReq, limit, offs
 	query = query.Where(userCondition, args...)
 	countQuery = countQuery.Where(userCondition, args...)
 
+	query = query.Order("created_at DESC")
 	err = query.Find(transfers).Error
 	if err != nil {
 		return fmt.Errorf("failed to get transfer: %v", err)
@@ -651,7 +654,7 @@ func (c *Cockroach) GetPaymentWithID(paymentID string) (*types.Payment, error) {
 	return &payment, nil
 }
 
-func (c *Cockroach) GetPaymentWithLimit(ops *types.UserQueryOpts, req types.LimitReq) ([]types.Payment, types.LimitResp, error) {
+func (c *Cockroach) GetPaymentWithLimit(ops *types.UserQueryOpts, req types.LimitReq, invoiced *bool) ([]types.Payment, types.LimitResp, error) {
 	var payment []types.Payment
 	var total int64
 	var limitResp types.LimitResp
@@ -661,7 +664,11 @@ func (c *Cockroach) GetPaymentWithLimit(ops *types.UserQueryOpts, req types.Limi
 		return nil, limitResp, fmt.Errorf("failed to get user uid: %v", err)
 	}
 
-	query := c.DB.Model(&types.Payment{}).Where(types.Payment{PaymentRaw: types.PaymentRaw{UserUID: userUID}})
+	queryPayment := types.Payment{PaymentRaw: types.PaymentRaw{UserUID: userUID}}
+	query := c.DB.Model(&types.Payment{}).Where(queryPayment)
+	if invoiced != nil {
+		query = query.Where("invoiced_at = ?", *invoiced)
+	}
 	if !req.StartTime.IsZero() {
 		query = query.Where("created_at >= ?", req.StartTime)
 	}
@@ -1053,4 +1060,77 @@ func (c *Cockroach) Close() error {
 		return fmt.Errorf("failed to get localdb: %w", err)
 	}
 	return db.Close()
+}
+
+func (c *Cockroach) GetGiftCodeWithCode(code string) (*types.GiftCode, error) {
+	var giftCode types.GiftCode
+	if err := c.DB.Where(&types.GiftCode{Code: code}).First(&giftCode).Error; err != nil {
+		return nil, fmt.Errorf("failed to get gift code: %w", err)
+	}
+	return &giftCode, nil
+}
+
+func (c *Cockroach) UseGiftCode(giftCode *types.GiftCode, userID string) error {
+	return c.DB.Transaction(func(tx *gorm.DB) error {
+		var lockedGiftCode types.GiftCode
+		// Lock the gift code record for update
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).
+			Where(&types.GiftCode{ID: giftCode.ID}).First(&lockedGiftCode).Error; err != nil {
+			return fmt.Errorf("failed to lock gift code: %w", err)
+		}
+
+		if lockedGiftCode.Used {
+			return fmt.Errorf("gift code has already been used")
+		}
+
+		ops := &types.UserQueryOpts{ID: userID}
+		// Update the user's balance
+		if err := c.updateBalance(tx, ops, giftCode.CreditAmount, false, true); err != nil {
+			return fmt.Errorf("failed to update user balance: %w", err)
+		}
+
+		message := "created by use gift code"
+		// Create an AccountTransaction record
+		accountTransaction := &types.AccountTransaction{
+			ID:               uuid.New(),
+			Type:             "GiftCode",
+			UserUID:          ops.UID,
+			DeductionBalance: 0,
+			Balance:          giftCode.CreditAmount,
+			Message:          &message,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+			BillingID:        giftCode.ID,
+		}
+		if err := tx.Create(accountTransaction).Error; err != nil {
+			return fmt.Errorf("failed to create account transaction: %w", err)
+		}
+
+		// Mark the gift code as used
+		giftCode.Used = true
+		giftCode.UsedBy = ops.UID
+		giftCode.UsedAt = time.Now()
+		if err := tx.Save(giftCode).Error; err != nil {
+			return fmt.Errorf("failed to update gift code: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func (c *Cockroach) GetUserRealNameInfoByUserID(userID string) (*types.UserRealNameInfo, error) {
+	// get user info
+	ops := &types.UserQueryOpts{ID: userID}
+	user, err := c.GetUserCr(ops)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %v", err)
+	}
+
+	// get user realname info
+	var userRealNameInfo types.UserRealNameInfo
+	if err := c.DB.Where(&types.UserRealNameInfo{UserUID: user.UserUID}).First(&userRealNameInfo).Error; err != nil {
+		return nil, fmt.Errorf("failed to get user real name info: %w", err)
+	}
+	return &userRealNameInfo, nil
 }

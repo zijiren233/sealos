@@ -10,8 +10,12 @@ cockroachdbGlobalUri=""
 localRegionUID=""
 
 tlsCrtPlaceholder="<tls-crt-placeholder>"
-tlsKeyPlaceholder="<tls-key-placeholder>"
+acmednsSecretPlaceholder="<acmedns-secret-placeholder>"
+
 saltKey=""
+jwtInternal=""
+jwtRegional=""
+jwtGlobal=""
 
 function prepare {
   # source .env
@@ -34,6 +38,9 @@ function prepare {
 
   # gen regionUID if not set or not found in secret
   gen_regionUID
+
+  # gen jwt tokens
+  gen_jwt_tokens
 
   # create tls secret
   create_tls_secret
@@ -131,12 +138,35 @@ function gen_cockroachdbUri() {
   cockroachdbGlobalUri="$cockroachdbUri/global"
 }
 
+# TODO: use a better way to check saltKey
 function gen_saltKey() {
     password_salt=$(kubectl get configmap desktop-frontend-config -n sealos -o jsonpath='{.data.config\.yaml}' | grep "salt:" | awk '{print $2}' 2>/dev/null | tr -d '"' || true)
     if [[ -z "$password_salt" ]]; then
         saltKey=$(tr -dc 'a-z0-9' </dev/urandom | head -c64)
     else
         saltKey=$password_salt
+    fi
+}
+
+# TODO: use a better way to check jwt tokens
+function gen_jwt_tokens() {
+    jwt_internal=$(kubectl get configmap desktop-frontend-config -n sealos -o jsonpath='{.data.config\.yaml}' | grep "internal:" | awk '{print $2}' 2>/dev/null | tr -d '"' || true)
+    if [[ -z "$jwt_internal" ]]; then
+        jwtInternal=$(tr -dc 'a-z0-9' </dev/urandom | head -c64)
+    else
+        jwtInternal=$jwt_internal
+    fi
+    jwt_regional=$(kubectl get configmap desktop-frontend-config -n sealos -o jsonpath='{.data.config\.yaml}' | grep "regional:" | awk '{print $2}' 2>/dev/null | tr -d '"' || true)
+    if [[ -z "$jwt_regional" ]]; then
+        jwtRegional=$(tr -dc 'a-z0-9' </dev/urandom | head -c64)
+    else
+        jwtRegional=$jwt_regional
+    fi
+    jwt_global=$(kubectl get configmap desktop-frontend-config -n sealos -o jsonpath='{.data.config\.yaml}' | grep "global:" | awk '{print $2}' 2>/dev/null | tr -d '"' || true)
+    if [[ -z "$jwt_global" ]]; then
+        jwtGlobal=$(tr -dc 'a-z0-9' </dev/urandom | head -c64)
+    else
+        jwtGlobal=$jwt_global
     fi
 }
 
@@ -150,13 +180,17 @@ function gen_regionUID(){
 }
 
 function create_tls_secret {
-  if grep -q $tlsCrtPlaceholder manifests/tls-secret.yaml; then
+  if ! grep -q $tlsCrtPlaceholder manifests/tls-secret.yaml; then
+    echo "tls secret is already set"
+    kubectl apply -f manifests/tls-secret.yaml
+  elif ! grep -q $acmednsSecretPlaceholder manifests/acme-cert.yaml; then
+    echo "acme tls secret"
+    kubectl apply -f manifests/acme-cert.yaml
+    echo "acme tls cert has been created successfully."
+  else
     echo "mock tls secret"
     kubectl apply -f manifests/mock-cert.yaml
     echo "mock tls cert has been created successfully."
-  else
-    echo "tls secret is already set"
-    kubectl apply -f manifests/tls-secret.yaml
   fi
 }
 
@@ -171,7 +205,10 @@ function sealos_run_desktop {
       --env regionUID="$localRegionUID" \
       --env databaseMongodbURI="${mongodbUri}/sealos-auth?authSource=admin" \
       --env databaseLocalCockroachdbURI="$cockroachdbLocalUri" \
-      --env databaseGlobalCockroachdbURI="$cockroachdbGlobalUri"
+      --env databaseGlobalCockroachdbURI="$cockroachdbGlobalUri" \
+      --env jwtInternal="$jwtInternal" \
+      --env jwtRegional="$jwtRegional" \
+      --env jwtGlobal="$jwtGlobal"
 }
 
 function sealos_run_controller {
@@ -208,7 +245,7 @@ function sealos_run_controller {
   --env LOCAL_COCKROACH_URI="$cockroachdbLocalUri" \
   --env LOCAL_REGION="$localRegionUID"
 
-  sealos run tars/account-service.tar
+  sealos run tars/account-service.tar --env cloudDomain="$cloudDomain" --env cloudPort="$cloudPort"
 
   # run license controller
   sealos run tars/license.tar
@@ -252,8 +289,9 @@ function sealos_run_frontend {
   --env cloudPort="$cloudPort" \
   --env certSecretName="wildcard-cert" \
   --env transferEnabled="true" \
-  --env rechargeEnabled="false"
-
+  --env rechargeEnabled="false" \
+  --env jwtInternal="$jwtInternal"
+ 
   echo "run template frontend"
   sealos run tars/frontend-template.tar \
   --env cloudDomain=$cloudDomain \

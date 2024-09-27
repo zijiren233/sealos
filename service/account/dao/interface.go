@@ -43,6 +43,7 @@ type Interface interface {
 	GetPropertiesUsedAmount(user string, startTime, endTime time.Time) (map[string]int64, error)
 	GetAccount(ops types.UserQueryOpts) (*types.Account, error)
 	GetPayment(ops *types.UserQueryOpts, req *helper.GetPaymentReq) ([]types.Payment, types.LimitResp, error)
+	GetMonitorUniqueValues(startTime, endTime time.Time, namespaces []string) ([]common.Monitor, error)
 	ApplyInvoice(req *helper.ApplyInvoiceReq) (invoice types.Invoice, payments []types.Payment, err error)
 	GetInvoice(req *helper.GetInvoiceReq) ([]types.Invoice, types.LimitResp, error)
 	GetInvoicePayments(invoiceID string) ([]types.Payment, error)
@@ -55,6 +56,8 @@ type Interface interface {
 	GetUserCrName(ops types.UserQueryOpts) (string, error)
 	GetRegions() ([]types.Region, error)
 	GetLocalRegion() types.Region
+	UseGiftCode(req *helper.UseGiftCodeReq) (*types.GiftCode, error)
+	GetUserRealNameInfo(req *helper.GetRealNameInfoReq) (*types.UserRealNameInfo, error)
 }
 
 type Account struct {
@@ -105,7 +108,7 @@ func (g *Cockroach) GetUserID(ops types.UserQueryOpts) (string, error) {
 func (g *Cockroach) GetUserCrName(ops types.UserQueryOpts) (string, error) {
 	user, err := g.ck.GetUserCr(&ops)
 	if err != nil {
-		return "", fmt.Errorf("failed to get user: %v", err)
+		return "", err
 	}
 	return user.CrName, nil
 }
@@ -125,7 +128,7 @@ func (g *Cockroach) GetPayment(ops *types.UserQueryOpts, req *helper.GetPaymentR
 			StartTime: req.StartTime,
 			EndTime:   req.EndTime,
 		},
-	})
+	}, req.Invoiced)
 }
 
 func (g *Cockroach) SetPaymentInvoice(req *helper.SetPaymentInvoiceReq) error {
@@ -206,7 +209,7 @@ func (m *MongoDB) GetCosts(req helper.ConsumptionRecordReq) (common.TimeCostsMap
 	}
 
 	pipeline := bson.A{
-		bson.D{{Key: "$match", Value: matchValue}},
+		bson.D{primitive.E{Key: "$match", Value: matchValue}},
 	}
 
 	project := bson.D{
@@ -215,15 +218,15 @@ func (m *MongoDB) GetCosts(req helper.ConsumptionRecordReq) (common.TimeCostsMap
 	}
 	if appType != "" && appName != "" && appType != resources.AppStore {
 		pipeline = append(pipeline,
-			bson.D{{Key: "$unwind", Value: "$app_costs"}},
-			bson.D{{Key: "$match", Value: bson.D{{Key: "app_costs.name", Value: appName}}}},
+			bson.D{primitive.E{Key: "$unwind", Value: "$app_costs"}},
+			bson.D{primitive.E{Key: "$match", Value: bson.D{{Key: "app_costs.name", Value: appName}}}},
 		)
 		project[1] = primitive.E{Key: "amount", Value: "$app_costs.amount"}
 	}
 
 	pipeline = append(pipeline,
-		bson.D{{Key: "$sort", Value: bson.D{{Key: "time", Value: 1}}}},
-		bson.D{{Key: "$project", Value: project}},
+		bson.D{primitive.E{Key: "$sort", Value: bson.D{{Key: "time", Value: 1}}}},
+		bson.D{primitive.E{Key: "$project", Value: project}},
 	)
 
 	cursor, err := m.getBillingCollection().Aggregate(context.Background(), pipeline)
@@ -1053,11 +1056,21 @@ func (m *MongoDB) getAppStoreList(req helper.GetCostAppListReq, skip, pageSize i
 	return
 }
 
-func (m *MongoDB) Disconnect(ctx context.Context) error {
+func (m *Account) Disconnect(ctx context.Context) error {
 	if m == nil {
 		return nil
 	}
-	return m.Client.Disconnect(ctx)
+	if m.MongoDB != nil && m.MongoDB.Client != nil {
+		if err := m.MongoDB.Client.Disconnect(ctx); err != nil {
+			return fmt.Errorf("failed to close mongodb client: %v", err)
+		}
+	}
+	if m.Cockroach != nil && m.Cockroach.ck != nil {
+		if err := m.ck.Close(); err != nil {
+			return fmt.Errorf("failed to close cockroach client: %v", err)
+		}
+	}
+	return nil
 }
 
 func (m *MongoDB) GetConsumptionAmount(req helper.ConsumptionRecordReq) (int64, error) {
@@ -1151,6 +1164,49 @@ func (m *MongoDB) getSumOfUsedAmount(propertyType uint8, user string, startTime,
 		}
 	}
 	return result.TotalAmount, nil
+}
+
+func (m *MongoDB) GetMonitorUniqueValues(startTime, endTime time.Time, namespaces []string) ([]common.Monitor, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"time": bson.M{
+				"$gte": startTime,
+				"$lte": endTime,
+			},
+			"category": bson.M{
+				"$in": namespaces,
+			},
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"category":    "$category",
+				"parent_type": "$parent_type",
+				"parent_name": "$parent_name",
+				"type":        "$type",
+				"name":        "$name",
+			},
+		}}},
+		{{Key: "$project", Value: bson.M{
+			"_id":         0,
+			"namespace":   "$_id.category",
+			"parent_type": "$_id.parent_type",
+			"parent_name": "$_id.parent_name",
+			"type":        "$_id.type",
+			"name":        "$_id.name",
+		}}},
+	}
+
+	cursor, err := m.getMonitorCollection(startTime).Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate error: %v", err)
+	}
+	defer cursor.Close(ctx)
+	var result []common.Monitor
+	if err := cursor.All(ctx, &result); err != nil {
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+	return result, nil
 }
 
 func NewAccountInterface(mongoURI, globalCockRoachURI, localCockRoachURI string) (Interface, error) {
@@ -1275,6 +1331,16 @@ func (m *MongoDB) getBillingCollection() *mongo.Collection {
 	return m.Client.Database(m.AccountDBName).Collection(m.BillingConn)
 }
 
+func (m *MongoDB) getMonitorCollection(collTime time.Time) *mongo.Collection {
+	// 2020-12-01 00:00:00 - 2020-12-01 23:59:59
+	return m.Client.Database(m.AccountDBName).Collection(m.getMonitorCollectionName(collTime))
+}
+
+func (m *MongoDB) getMonitorCollectionName(collTime time.Time) string {
+	// Calculate the suffix by day, for example, the suffix on the first day of 202012 is 20201201
+	return fmt.Sprintf("%s_%s", "monitor", collTime.Format("20060102"))
+}
+
 func (m *Account) ApplyInvoice(req *helper.ApplyInvoiceReq) (invoice types.Invoice, payments []types.Payment, err error) {
 	if len(req.PaymentIDList) == 0 {
 		return
@@ -1288,7 +1354,7 @@ func (m *Account) ApplyInvoice(req *helper.ApplyInvoiceReq) (invoice types.Invoi
 		return
 	}
 	amount := int64(0)
-	var paymentIds []string
+	var paymentIDs []string
 	var invoicePayments []types.InvoicePayment
 	id, err := gonanoid.New(12)
 	if err != nil {
@@ -1297,7 +1363,7 @@ func (m *Account) ApplyInvoice(req *helper.ApplyInvoiceReq) (invoice types.Invoi
 	}
 	for i := range payments {
 		amount += payments[i].Amount
-		paymentIds = append(paymentIds, payments[i].ID)
+		paymentIDs = append(paymentIDs, payments[i].ID)
 		invoicePayments = append(invoicePayments, types.InvoicePayment{
 			PaymentID: payments[i].ID,
 			Amount:    payments[i].Amount,
@@ -1316,7 +1382,7 @@ func (m *Account) ApplyInvoice(req *helper.ApplyInvoiceReq) (invoice types.Invoi
 	// save invoice with transaction
 	if err = m.ck.DB.Transaction(
 		func(tx *gorm.DB) error {
-			if err = m.ck.SetPaymentInvoiceWithDB(&types.UserQueryOpts{ID: req.UserID}, paymentIds, tx); err != nil {
+			if err = m.ck.SetPaymentInvoiceWithDB(&types.UserQueryOpts{ID: req.UserID}, paymentIDs, tx); err != nil {
 				return fmt.Errorf("failed to set payment invoice: %v", err)
 			}
 			if err = m.ck.CreateInvoiceWithDB(&invoice, tx); err != nil {
@@ -1357,4 +1423,36 @@ func (m *Account) GetInvoicePayments(invoiceID string) ([]types.Payment, error) 
 
 func (m *Account) SetStatusInvoice(req *helper.SetInvoiceStatusReq) error {
 	return m.ck.SetInvoiceStatus(req.InvoiceIDList, req.Status)
+}
+
+func (m *Account) UseGiftCode(req *helper.UseGiftCodeReq) (*types.GiftCode, error) {
+	giftCode, err := m.ck.GetGiftCodeWithCode(req.Code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gift code: %v", err)
+	}
+
+	if !giftCode.ExpiredAt.IsZero() && time.Now().After(giftCode.ExpiredAt) {
+		return nil, fmt.Errorf("gift code has expired")
+	}
+
+	if giftCode.Used {
+		return nil, fmt.Errorf("gift code is already used")
+	}
+
+	if err = m.ck.UseGiftCode(giftCode, req.UserID); err != nil {
+		return nil, fmt.Errorf("failed to use gift code: %v", err)
+	}
+
+	return giftCode, nil
+}
+
+func (m *Account) GetUserRealNameInfo(req *helper.GetRealNameInfoReq) (*types.UserRealNameInfo, error) {
+	// get user info
+	userRealNameInfo, err := m.ck.GetUserRealNameInfoByUserID(req.UserID)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user real name info: %v", err)
+	}
+
+	return userRealNameInfo, nil
 }

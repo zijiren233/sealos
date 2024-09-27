@@ -27,10 +27,13 @@ export type AppConfigType = {
   cloud: {
     domain: string;
     port?: string;
+    userDomain: string[];
+    desktopDomain: string;
   };
   common: {
     guideEnabled: boolean;
     apiEnabled: boolean;
+    gpuEnabled: boolean;
   };
   launchpad: {
     ingressTlsSecretName: string;
@@ -40,6 +43,9 @@ export type AppConfigType = {
     };
     components: {
       monitor: {
+        url: string;
+      };
+      billing: {
         url: string;
       };
     };

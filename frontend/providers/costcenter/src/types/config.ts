@@ -58,6 +58,7 @@ export type AppConfigType = {
   };
   costCenter: {
     transferEnabled: boolean;
+    giftCodeEnabled: boolean;
     currencyType: string;
     invoice: Invoice;
     recharge: Recharge;
@@ -66,7 +67,7 @@ export type AppConfigType = {
     auth: {
       jwt: {
         internal: string;
-        external: string;
+        billing: string;
       };
     };
   };
@@ -74,6 +75,7 @@ export type AppConfigType = {
 
 export var DefaultAppConfig: AppConfigType = {
   costCenter: {
+    giftCodeEnabled: true,
     transferEnabled: true,
     currencyType: 'shellCoin',
     invoice: {
@@ -122,7 +124,7 @@ export var DefaultAppConfig: AppConfigType = {
     auth: {
       jwt: {
         internal: '',
-        external: ''
+        billing: ''
       }
     }
   },

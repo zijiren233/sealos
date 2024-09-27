@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -29,6 +30,11 @@ func RegisterPayRouter() {
 	if err := dao.InitDB(); err != nil {
 		log.Fatalf("Error initializing database: %v", err)
 	}
+	defer func() {
+		if err := dao.DBClient.Disconnect(context.Background()); err != nil {
+			log.Fatalf("Error disconnecting database: %v", err)
+		}
+	}()
 	// /account/v1alpha1/{/namespaces | /properties | {/costs | /costs/recharge | /costs/consumption | /costs/properties}}
 	router.Group(helper.GROUP).
 		POST(helper.GetHistoryNamespaces, api.GetBillingHistoryNamespaceList).
@@ -39,6 +45,7 @@ func RegisterPayRouter() {
 		POST(helper.GetPayment, api.GetPayment).
 		POST(helper.GetRechargeAmount, api.GetRechargeAmount).
 		POST(helper.GetConsumptionAmount, api.GetConsumptionAmount).
+		POST(helper.GetAllRegionConsumptionAmount, api.GetAllRegionConsumptionAmount).
 		POST(helper.GetPropertiesUsed, api.GetPropertiesUsedAmount).
 		POST(helper.SetPaymentInvoice, api.SetPaymentInvoice). // will be deprecated
 		POST(helper.SetTransfer, api.TransferAmount).
@@ -53,7 +60,10 @@ func RegisterPayRouter() {
 		POST(helper.GetInvoice, api.GetInvoice).
 		POST(helper.ApplyInvoice, api.ApplyInvoice).
 		POST(helper.SetStatusInvoice, api.SetStatusInvoice).
-		POST(helper.GetInvoicePayment, api.GetInvoicePayment)
+		POST(helper.GetInvoicePayment, api.GetInvoicePayment).
+		POST(helper.UseGiftCode, api.UseGiftCode).
+		POST(helper.UserUsage, api.UserUsage).
+		POST(helper.GetUserRealNameInfo, api.GetUserRealNameInfo)
 	docs.SwaggerInfo.Host = env.GetEnvWithDefault("SWAGGER_HOST", "localhost:2333")
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 

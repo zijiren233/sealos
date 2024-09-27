@@ -4,6 +4,7 @@ import type { AppConfigType, FileMangerType, FormSliderListType } from '@/types'
 import { readFileSync } from 'fs';
 import * as yaml from 'js-yaml';
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getGpuNode } from './resourcePrice';
 
 // todo make response type to be more specific and clear.
 export type Response = {
@@ -15,16 +16,21 @@ export type Response = {
   CURRENCY: Coin;
   guideEnabled: boolean;
   fileMangerConfig: FileMangerType;
+  SEALOS_USER_DOMAIN: string[];
+  DESKTOP_DOMAIN: string;
 };
 
 export const defaultAppConfig: AppConfigType = {
   cloud: {
     domain: 'cloud.sealos.io',
-    port: ''
+    port: '',
+    userDomain: ['cloud.sealos.io'],
+    desktopDomain: 'cloud.sealos.io'
   },
   common: {
     guideEnabled: false,
-    apiEnabled: false
+    apiEnabled: false,
+    gpuEnabled: false
   },
   launchpad: {
     ingressTlsSecretName: 'wildcard-cert',
@@ -35,6 +41,9 @@ export const defaultAppConfig: AppConfigType = {
     components: {
       monitor: {
         url: 'http://launchpad-monitor.sealos.svc.cluster.local:8428'
+      },
+      billing: {
+        url: 'http://account-service.account-system.svc:2333'
       }
     },
     appResourceFormSliderConfig: {
@@ -60,13 +69,16 @@ process.on('uncaughtException', (err) => {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    if (!global.AppConfig || process.env.NODE_ENV !== 'production') {
+    if (!global.AppConfig) {
       const filename =
         process.env.NODE_ENV === 'development' ? 'data/config.yaml.local' : '/app/data/config.yaml';
       const res: any = yaml.load(readFileSync(filename, 'utf-8'));
       console.log(res);
       global.AppConfig = res;
+      const gpuNodes = await getGpuNode();
+      global.AppConfig.common.gpuEnabled = gpuNodes.length > 0;
     }
+
     jsonRes<Response>(res, {
       data: {
         SEALOS_DOMAIN: global.AppConfig.cloud.domain,
@@ -76,7 +88,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         FORM_SLIDER_LIST_CONFIG: global.AppConfig.launchpad.appResourceFormSliderConfig,
         guideEnabled: global.AppConfig.common.guideEnabled,
         fileMangerConfig: global.AppConfig.launchpad.fileManger,
-        CURRENCY: Coin.shellCoin
+        CURRENCY: Coin.shellCoin,
+        SEALOS_USER_DOMAIN: global.AppConfig.cloud.userDomain || [],
+        DESKTOP_DOMAIN: global.AppConfig.cloud.desktopDomain
       }
     });
   } catch (error) {

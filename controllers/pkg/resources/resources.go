@@ -164,6 +164,7 @@ const (
 	cvm
 	appStore
 	dbBackup
+	devBox
 )
 
 const (
@@ -176,14 +177,15 @@ const (
 	CVM           = "CLOUD-VM"
 	AppStore      = "APP-STORE"
 	DBBackup      = "DB-BACKUP"
+	DevBox        = "DEV-BOX"
 )
 
 var AppType = map[string]uint8{
-	DB: db, APP: app, TERMINAL: terminal, JOB: job, OTHER: other, ObjectStorage: objectStorage, CVM: cvm, AppStore: appStore, DBBackup: dbBackup,
+	DB: db, APP: app, TERMINAL: terminal, JOB: job, OTHER: other, ObjectStorage: objectStorage, CVM: cvm, AppStore: appStore, DBBackup: dbBackup, DevBox: devBox,
 }
 
 var AppTypeReverse = map[uint8]string{
-	db: DB, app: APP, terminal: TERMINAL, job: JOB, other: OTHER, objectStorage: ObjectStorage, cvm: CVM, appStore: AppStore, dbBackup: DBBackup,
+	db: DB, app: APP, terminal: TERMINAL, job: JOB, other: OTHER, objectStorage: ObjectStorage, cvm: CVM, appStore: AppStore, dbBackup: DBBackup, devBox: DevBox,
 }
 
 // resource consumption
@@ -378,7 +380,7 @@ const (
 	DefaultQuotaLimitsMemory        = "64Gi"
 	DefaultQuotaLimitsStorage       = "100Gi"
 	DefaultQuotaLimitsGPU           = "8"
-	DefaultQuotaLimitsNodePorts     = "3"
+	DefaultQuotaLimitsNodePorts     = "10"
 	DefaultQuotaObjectStorageSize   = "100Gi"
 	DefaultQuotaObjectStorageBucket = "5"
 )

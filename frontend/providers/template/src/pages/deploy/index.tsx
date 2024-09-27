@@ -10,12 +10,9 @@ import { useSearchStore } from '@/store/search';
 import type { QueryType, YamlItemType } from '@/types';
 import { ApplicationType, TemplateSourceType } from '@/types/app';
 import { serviceSideProps } from '@/utils/i18n';
-import {
-  generateYamlList,
-  parseTemplateString,
-} from '@/utils/json-yaml';
+import { generateYamlList, parseTemplateString } from '@/utils/json-yaml';
 import { compareFirstLanguages, deepSearch, useCopyData } from '@/utils/tools';
-import { Box, Flex, Icon, Text } from '@chakra-ui/react';
+import { Box, Flex, Icon, Text, Grid, GridItem } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import debounce from 'lodash/debounce';
 import { useTranslation } from 'next-i18next';
@@ -26,13 +23,29 @@ import { useForm } from 'react-hook-form';
 import Form from './components/Form';
 import ReadMe from './components/ReadMe';
 import { getTemplateInputDefaultValues, getTemplateValues } from '@/utils/template';
+import QuotaBox from './components/QuotaBox';
+import PriceBox from './components/PriceBox';
+import { useUserStore } from '@/store/user';
+import { getResourceUsage } from '@/utils/usage';
+import Head from 'next/head';
+import { useMessage } from '@sealos/ui';
 
 const ErrorModal = dynamic(() => import('./components/ErrorModal'));
 const Header = dynamic(() => import('./components/Header'), { ssr: false });
 
-export default function EditApp({ appName }: { appName?: string }) {
+export default function EditApp({
+  appName,
+  metaData
+}: {
+  appName?: string;
+  metaData: {
+    title: string;
+    keywords: string;
+    description: string;
+  };
+}) {
   const { t, i18n } = useTranslation();
-  const { toast } = useToast();
+  const { message: toast } = useMessage();
   const router = useRouter();
   const { copyData } = useCopyData();
   const { templateName } = router.query as QueryType;
@@ -44,11 +57,20 @@ export default function EditApp({ appName }: { appName?: string }) {
   const { screenWidth } = useGlobalStore();
   const { setCached, cached, insideCloud, deleteCached, setInsideCloud } = useCachedStore();
   const { setAppType } = useSearchStore();
+  const { userSourcePrice, checkQuotaAllow, loadUserQuota } = useUserStore();
+  useEffect(() => {
+    loadUserQuota();
+  }, []);
 
   const detailName = useMemo(
     () => templateSource?.source?.defaults?.app_name?.value || '',
     [templateSource]
   );
+
+  const usage = useMemo(() => {
+    const usage = getResourceUsage(yamlList?.map((item) => item.value) || []);
+    return usage;
+  }, [yamlList]);
 
   const { data: platformEnvs } = useQuery(['getPlatformEnvs'], getPlatformEnv, {
     staleTime: 5 * 60 * 1000
@@ -70,37 +92,45 @@ export default function EditApp({ appName }: { appName?: string }) {
     return val;
   }, [screenWidth]);
 
-  const generateYamlData = useCallback((templateSource: TemplateSourceType, inputs: Record<string, string>): YamlItemType[] => {
-    if (!templateSource) return [];
-    const app_name = templateSource?.source?.defaults?.app_name?.value;
-    const { defaults, defaultInputs } = getTemplateValues(templateSource);
-    const data = {
-      ...platformEnvs,
-      ...templateSource?.source,
-      inputs: {
-        ...defaultInputs,
-        ...inputs
-      },
-      defaults: defaults,
-    };
-    const generateStr = parseTemplateString(templateSource.appYaml, data);
-    return generateYamlList(generateStr, app_name);
-  }, [platformEnvs])
+  const generateYamlData = useCallback(
+    (templateSource: TemplateSourceType, inputs: Record<string, string>): YamlItemType[] => {
+      if (!templateSource) return [];
+      const app_name = templateSource?.source?.defaults?.app_name?.value;
+      const { defaults, defaultInputs } = getTemplateValues(templateSource);
+      const data = {
+        ...platformEnvs,
+        ...templateSource?.source,
+        inputs: {
+          ...defaultInputs,
+          ...inputs
+        },
+        defaults: defaults
+      };
+      const generateStr = parseTemplateString(templateSource.appYaml, data);
+      return generateYamlList(generateStr, app_name);
+    },
+    [platformEnvs]
+  );
 
-  const formOnchangeDebounce = useCallback(debounce((inputs: Record<string, string>) => {
-    try {
-      if (!templateSource) return;
-      const list = generateYamlData(templateSource, inputs)
-      setYamlList(list);
-    } catch (error) {
-      console.log(error);
-    }
-  }, 500), [templateSource, generateYamlData]);
+  const formOnchangeDebounce = useCallback(
+    debounce((inputs: Record<string, string>) => {
+      try {
+        if (!templateSource) return;
+        const list = generateYamlData(templateSource, inputs);
+        setYamlList(list);
+      } catch (error) {
+        console.log(error);
+      }
+    }, 500),
+    [templateSource, generateYamlData]
+  );
 
-  const getCachedValue = (): {
-    cachedKey: string,
-    [key: string]: any
-  } | undefined => {
+  const getCachedValue = ():
+    | {
+        cachedKey: string;
+        [key: string]: any;
+      }
+    | undefined => {
     if (!cached) return undefined;
     const cachedValue = JSON.parse(cached);
     return cachedValue?.cachedKey === templateName ? cachedValue : undefined;
@@ -121,37 +151,74 @@ export default function EditApp({ appName }: { appName?: string }) {
   }, [formHook, formOnchangeDebounce]);
 
   const submitSuccess = async () => {
+    const quoteCheckRes = checkQuotaAllow({
+      cpu: usage.cpu.max,
+      memory: usage.memory.max,
+      storage: usage.storage.max
+    });
+
+    if (quoteCheckRes) {
+      return toast({
+        status: 'warning',
+        title: t(quoteCheckRes),
+        duration: 5000,
+        isClosable: true
+      });
+    }
     setIsLoading(true);
+
     try {
       if (!insideCloud) {
-        setIsLoading(false);
-        setCached(JSON.stringify({ ...formHook.getValues(), cachedKey: templateName }));
-        const _name = encodeURIComponent(`?templateName=${templateName}&sealos_inside=true`);
-        const _domain = platformEnvs?.SEALOS_CLOUD_DOMAIN;
-        const href = `https://${_domain}/?openapp=system-template${_name}`;
-        return window.open(href, '_self');
+        handleOutside();
+      } else {
+        await handleInside();
       }
-      const yamls = yamlList.map((item) => item.value);
-
-      await postDeployApp(yamls, 'create');
-
-      toast({
-        title: t(applySuccess),
-        status: 'success'
-      });
-
-      deleteCached();
-      setAppType(ApplicationType.MyApp);
-      router.push({
-        pathname: '/instance',
-        query: {
-          instanceName: detailName
-        }
-      });
     } catch (error) {
       setErrorMessage(JSON.stringify(error));
     }
     setIsLoading(false);
+  };
+
+  const handleOutside = () => {
+    setCached(JSON.stringify({ ...formHook.getValues(), cachedKey: templateName }));
+
+    const params = new URLSearchParams();
+    ['k', 's', 'bd_vid'].forEach((param) => {
+      const value = router.query[param];
+      if (typeof value === 'string') {
+        params.append(param, value);
+      }
+    });
+
+    const queryString = params.toString();
+
+    const baseUrl = `https://${platformEnvs?.SEALOS_CLOUD_DOMAIN}/`;
+    const encodedTemplateQuery = encodeURIComponent(
+      `?templateName=${templateName}&sealos_inside=true`
+    );
+    const templateQuery = `openapp=system-template${encodedTemplateQuery}`;
+    const href = `${baseUrl}${
+      queryString ? `?${queryString}&${templateQuery}` : `?${templateQuery}`
+    }`;
+
+    window.open(href, '_self');
+  };
+
+  const handleInside = async () => {
+    const yamls = yamlList.map((item) => item.value);
+    await postDeployApp(yamls, 'create');
+
+    toast({
+      title: t(applySuccess),
+      status: 'success'
+    });
+
+    deleteCached();
+    setAppType(ApplicationType.MyApp);
+    router.push({
+      pathname: '/instance',
+      query: { instanceName: detailName }
+    });
   };
 
   const submitError = async () => {
@@ -230,6 +297,15 @@ export default function EditApp({ appName }: { appName?: string }) {
       borderRadius={'12px'}
       background={'linear-gradient(180deg, #FFF 0%, rgba(255, 255, 255, 0.70) 100%)'}
     >
+      <Head>
+        <title>{`${metaData.title}${
+          i18n.language === 'en'
+            ? 'Deployment and installation tutorial - Sealos'
+            : '部署和安装教程 - Sealos'
+        }`}</title>
+        <meta name="keywords" content={metaData.keywords} />
+        <meta name="description" content={metaData.description} />
+      </Head>
       <Flex
         zIndex={99}
         position={'sticky'}
@@ -304,7 +380,13 @@ export default function EditApp({ appName }: { appName?: string }) {
             applyCb={() => formHook.handleSubmit(openConfirm(submitSuccess), submitError)()}
           />
           <Flex w="100%" mt="32px" flexDirection="column">
-            <Form formHook={formHook} pxVal={pxVal} formSource={templateSource!} platformEnvs={platformEnvs!} />
+            {/* <QuotaBox /> */}
+            <Form
+              formHook={formHook}
+              pxVal={pxVal}
+              formSource={templateSource!}
+              platformEnvs={platformEnvs!}
+            />
             {/* <Yaml yamlList={yamlList} pxVal={pxVal}></Yaml> */}
             <ReadMe templateDetail={data?.templateYaml!} />
           </Flex>
@@ -332,9 +414,29 @@ export async function getServerSideProps(content: any) {
 
   const appName = content?.query?.templateName || '';
 
+  const baseurl = `http://${process.env.HOSTNAME || 'localhost'}:${process.env.PORT || 3000}`;
+
+  let metaData = {
+    title: `${appName}部署和安装教程 - Sealos`,
+    keywords: '',
+    description: ''
+  };
+
+  try {
+    const templateSource: { data: TemplateSourceType } = await (
+      await fetch(`${baseurl}/api/getTemplateSource?templateName=${appName}`)
+    ).json();
+    metaData = {
+      title: templateSource?.data.templateYaml.spec.title,
+      keywords: templateSource?.data.templateYaml.spec.description,
+      description: templateSource?.data.templateYaml.spec.description
+    };
+  } catch (error) {}
+
   return {
     props: {
       appName,
+      metaData,
       ...(await serviceSideProps(content))
     }
   };
