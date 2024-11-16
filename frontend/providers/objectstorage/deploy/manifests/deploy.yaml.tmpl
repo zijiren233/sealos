@@ -37,11 +37,11 @@ spec:
               value: https://object-storage-monitor.{{ .cloudDomain }}/q
           resources:
             limits:
-              cpu: 2000m
-              memory: 2048Mi
+              cpu: 50m
+              memory: 256Mi
             requests:
-              cpu: 10m
-              memory: 128Mi
+              cpu: 5m
+              memory: 64Mi
           imagePullPolicy: Always
           volumeMounts: []
       affinity:

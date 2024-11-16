@@ -95,11 +95,11 @@ spec:
               subPath: config.yaml
           resources:
             limits:
-              cpu: 2000m
-              memory: 2048Mi
-            requests:
-              cpu: 100m
+              cpu: 50m
               memory: 128Mi
+            requests:
+              cpu: 5m
+              memory: 64Mi
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
