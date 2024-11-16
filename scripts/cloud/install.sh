@@ -428,10 +428,11 @@ spec:
           effect: NoSchedule
       resources:
         requests:
-          cpu: 256m
-          memory: 256Mi
+          cpu: 5m
+          memory: 64Mi
         limits:
-          memory: 4Gi
+          cpu: 50m
+          memory: 256Mi
     controller:
       autoscaling:
         enabled: true
@@ -443,7 +444,10 @@ spec:
           effect: NoSchedule
       resources:
         requests:
-          cpu: 256m
+          cpu: 5m
+          memory: 64Mi
+        limits:
+          cpu: 50m
           memory: 256Mi
   match: ${image_registry}/${image_repository}/higress:v${higress_version#v:-2.0.1}
   path: charts/higress/charts/higress-core/values.yaml

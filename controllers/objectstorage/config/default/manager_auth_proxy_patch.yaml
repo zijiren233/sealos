@@ -57,8 +57,8 @@ spec:
               name: https
           resources:
             limits:
-              cpu: 500m
-              memory: 128Mi
+              cpu: 50m
+              memory: 256Mi
             requests:
               cpu: 5m
               memory: 64Mi
@@ -84,11 +84,11 @@ spec:
             - "--leader-elect"
           resources:
             limits:
-              cpu: 500m
-              memory: 512Mi
-            requests:
-              cpu: 250m
+              cpu: 50m
               memory: 256Mi
+            requests:
+              cpu: 5m
+              memory: 64Mi
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
