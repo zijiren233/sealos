@@ -431,7 +431,7 @@ spec:
           cpu: 5m
           memory: 64Mi
         limits:
-          cpu: 50m
+          cpu: 100m
           memory: 256Mi
     controller:
       autoscaling:
@@ -447,8 +447,13 @@ spec:
           cpu: 5m
           memory: 64Mi
         limits:
-          cpu: 50m
+          cpu: 100m
           memory: 256Mi
+    pilot:
+      resources:
+        requests:
+          cpu: 5m
+          memory: 64Mi
   match: ${image_registry}/${image_repository}/higress:v${higress_version#v:-2.0.1}
   path: charts/higress/charts/higress-core/values.yaml
   strategy: merge
