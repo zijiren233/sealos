@@ -15,11 +15,11 @@ spec:
         volumeMode: Filesystem
   resources:
     requests:
-      cpu: 20m
+      cpu: 10m
       memory: 256Mi
     limits:
       cpu: 100m
       memory: 1Gi
   tlsEnabled: true
   cockroachDBVersion: v23.1.11
-  nodes: 1
+  nodes: 3
