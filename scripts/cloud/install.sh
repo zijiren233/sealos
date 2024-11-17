@@ -428,8 +428,8 @@ spec:
           effect: NoSchedule
       resources:
         requests:
-          cpu: 5m
-          memory: 64Mi
+          cpu: 10m
+          memory: 32Mi
         limits:
           cpu: 100m
           memory: 256Mi
@@ -444,16 +444,16 @@ spec:
           effect: NoSchedule
       resources:
         requests:
-          cpu: 5m
-          memory: 64Mi
+          cpu: 10m
+          memory: 32Mi
         limits:
           cpu: 100m
           memory: 256Mi
     pilot:
       resources:
         requests:
-          cpu: 5m
-          memory: 64Mi
+          cpu: 10m
+          memory: 32Mi
   match: ${image_registry}/${image_repository}/higress:v${higress_version#v:-2.0.1}
   path: charts/higress/charts/higress-core/values.yaml
   strategy: merge
@@ -901,3 +901,16 @@ echo -e "${BOLD}Sealos cloud login info:${RESET}\nCloud Version: ${GREEN}${cloud
 if [[ $fulldomain != "" ]]; then
   printf "$(get_prompt "acme_cname_record")\n" "$cloud_domain" "$fulldomain"
 fi
+
+kubectl patch ds cilium -n kube-system --type=json -p='[{"op": "replace", "path": "/spec/template/spec/initContainers/5/resources/requests/cpu", "value": "10m"}]'
+kubectl patch vmagent victoria-metrics-k8s-stack -n vm --type='json' -p='[{"op": "replace", "path": "/spec/resources/requests", "value": {"cpu": "10m", "memory": "32Mi"}}]'
+
+kubectl patch deployment victoria-metrics-k8s-stack-victoria-metrics-operator -n vm --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "VM_VMALERTDEFAULT_CONFIGRELOADERCPU", "value": "10m"}}]'
+kubectl patch deployment victoria-metrics-k8s-stack-victoria-metrics-operator -n vm --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "VM_VMAGENTDEFAULT_CONFIGRELOADERCPU", "value": "10m"}}]'
+kubectl patch deployment victoria-metrics-k8s-stack-victoria-metrics-operator -n vm --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "VM_VMALERTMANAGER_CONFIGRELOADERCPU", "value": "10m"}}]'
+kubectl patch vmalert victoria-metrics-k8s-stack -n vm --type='json' -p='[{"op": "replace", "path": "/spec/resources/requests", "value": {"cpu": "10m", "memory": "32Mi"}}]'
+kubectl patch vmalertmanager victoria-metrics-k8s-stack -n vm --type='json' -p='[{"op": "replace", "path": "/spec/resources/requests", "value": {"cpu": "10m", "memory": "32Mi"}}]'
+kubectl patch vmsingle victoria-metrics-k8s-stack -n vm --type='json' -p='[{"op": "replace", "path": "/spec/resources/requests", "value": {"cpu": "10m", "memory": "32Mi"}}]'
+
+kubectl patch deployment coredns -n kube-system --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/resources/requests", "value": {"cpu": "10m", "memory": "32Mi"}}]'
+kubectl patch deployment metrics-server -n kube-system --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/resources/requests", "value": {"cpu": "10m", "memory": "32Mi"}}]'
