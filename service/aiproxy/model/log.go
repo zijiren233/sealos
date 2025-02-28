@@ -98,31 +98,31 @@ func CreateLogIndexes(db *gorm.DB) error {
 	} else {
 		indexes = []string{
 			// used by global search logs
-			"CREATE INDEX IF NOT EXISTS idx_model_reqat ON logs (model, request_at) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_model_reqat_inc_code_usedamount_totaltokens ON logs (model, request_at) INCLUDE (code, used_amount, total_tokens)",
 			// global day indexes, used by global dashboard
-			"CREATE INDEX IF NOT EXISTS idx_model_reqat_truncday ON logs (model, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_model_reqat_truncday_inc_code_usedamount_totaltokens ON logs (model, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
 			// global hour indexes, used by global dashboard
-			"CREATE INDEX IF NOT EXISTS idx_model_reqat_trunchour ON logs (model, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_model_reqat_trunchour_inc_code_usedamount_totaltokens ON logs (model, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
 
 			// used by search group logs
-			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat ON logs (group_id, token_name, request_at) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat_inc_code_usedamount_totaltokens ON logs (group_id, token_name, request_at) INCLUDE (code, used_amount, total_tokens)",
 			// used by search group logs
-			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat ON logs (group_id, token_name, request_at) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat_inc_code_usedamount_totaltokens ON logs (group_id, token_name, request_at) INCLUDE (code, used_amount, total_tokens)",
 			// used by search group logs
-			"CREATE INDEX IF NOT EXISTS idx_group_model_reqat ON logs (group_id, model, request_at) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_model_reqat_inc_code_usedamount_totaltokens ON logs (group_id, model, request_at) INCLUDE (code, used_amount, total_tokens)",
 			// used by search group logs
-			"CREATE INDEX IF NOT EXISTS idx_group_token_model_reqat ON logs (group_id, token_name, model, request_at) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_token_model_reqat_inc_code_usedamount_totaltokens ON logs (group_id, token_name, model, request_at) INCLUDE (code, used_amount, total_tokens)",
 
 			// day indexes, used by dashboard
-			"CREATE INDEX IF NOT EXISTS idx_group_reqat_truncday ON logs (group_id, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
-			"CREATE INDEX IF NOT EXISTS idx_group_model_reqat_truncday ON logs (group_id, model, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
-			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat_truncday ON logs (group_id, token_name, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
-			"CREATE INDEX IF NOT EXISTS idx_group_model_token_reqat_truncday ON logs (group_id, model, token_name, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_reqat_truncday_inc_code_usedamount_totaltokens ON logs (group_id, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_model_reqat_truncday_inc_code_usedamount_totaltokens ON logs (group_id, model, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat_truncday_inc_code_usedamount_totaltokens ON logs (group_id, token_name, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_model_token_reqat_truncday_inc_code_usedamount_totaltokens ON logs (group_id, model, token_name, request_at, timestamp_trunc_by_day) INCLUDE (code, used_amount, total_tokens)",
 			// hour indexes, used by dashboard
-			"CREATE INDEX IF NOT EXISTS idx_group_reqat_trunchour ON logs (group_id, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
-			"CREATE INDEX IF NOT EXISTS idx_group_model_reqat_trunchour ON logs (group_id, model, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
-			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat_trunchour ON logs (group_id, token_name, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
-			"CREATE INDEX IF NOT EXISTS idx_group_model_token_reqat_trunchour ON logs (group_id, model, token_name, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_reqat_trunchour_inc_code_usedamount_totaltokens ON logs (group_id, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_model_reqat_trunchour_inc_code_usedamount_totaltokens ON logs (group_id, model, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_token_reqat_trunchour_inc_code_usedamount_totaltokens ON logs (group_id, token_name, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
+			"CREATE INDEX IF NOT EXISTS idx_group_model_token_reqat_trunchour_inc_code_usedamount_totaltokens ON logs (group_id, model, token_name, request_at, timestamp_trunc_by_hour) INCLUDE (code, used_amount, total_tokens)",
 		}
 	}
 
