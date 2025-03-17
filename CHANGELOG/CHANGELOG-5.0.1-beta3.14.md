@@ -1,0 +1,91 @@
+Welcome to the v5.0.1-beta3.14 release of Sealos!🎉🎉!
+
+
+
+## Changelog
+### New Features
+* 5016562aab7651278436cab77e537ed4d2bb352c: feat: add GPU horizontal pod autoscaling for launchpad (#5277) (@zjy365)
+* cbe717043e1c90695cd51f142334ffba16d08f87: feat: add devbox service (#5275) (@cbluebird)
+* 226ddef68b7372a02d7cfc96e8e7bcec3a753d1c: feat: add driver for devbox (#5322) (@zjy365)
+* 2864b0a665ee6a97c8ca740a22a907488f0af79f: feat: aiproxy ali opensource models (#5288) (@zijiren233)
+* 418688aa66f224319f56a177d8493a9abca6c3d0: feat: aiproxy baidu ernie v2 (#5287) (@zijiren233)
+* 150f1e129e70661ed531814e3c73840472aabc69: feat: aiproxy v2 (#5269) (@zijiren233)
+* 52e0485ee3726bef4e54321bba0da8ea2be39b5d: feat: arm64 runner (@zijiren233)
+* 516414bc62e5e2f23792921b6cf172f023371bc3: feat: cronjob history limit from env (#5249) (@zijiren233)
+* b6f13c0475d4e091e502ac526553c5dbe5fd1ce4: feat: cronjob sts && template readme (#5324) (@zjy365)
+* c7a8673bc5374c51e35ae3ded0af12b9e128d453: feat: database UI 2.0 (#5293) (@zjy365)
+* 5024732aa29d33f1d87695cc3175c05c2edf5d66: feat: desktop add two beginner tasks (#5279) (@zjy365)
+* 4a6fcd0c6eb9ab787895d3b228e14cd453c383c1: feat: doubao tts (#5285) (@zijiren233)
+* 5dcd1f9da18ca2d466eadfcf26b8759680fe9b23: feat: start and pause will modify ingress (#5321) (@mlhiter)
+* fd9542c83c19e99471b1327c2a6f9c159a0600c7: feat: support backup selection during database creation (#5252) (@zjy365)
+* 7f9085f36130b6e3971371f5cd44eaf960e1ed6d: feat: support multiple volumes (#5337) (@zjy365)
+* 365aededad58dcfd3faf955008814d714c9b6a22: feat: support node selector and runtime class name for devbox. support custom resource name. (#5330) (@lingdie)
+* 6e6f94083de664cd9468a58f2d2b32eaff5bcfb5: feat:support ratio 0 (#5286) (@xudaotutou)
+### Bug fixes
+* f65ddcfca0c548e55a2b072720d86fec08b043eb: fix(costcenter):price icon (#5304) (@xudaotutou)
+* aaecf4d338fdd888759f5a8087d63738c4def133: fix(costcneter):fix gpu price alias (#5309) (@xudaotutou)
+* 1389cd0d03daf0846854070d0e50ba56a15536fa: fix(devbox): fix invaild devbox cr (#5339) (@xudaotutou)
+* 2fd87fa768e2440e9288735e10d063d3cfb9f205: fix(devbox):fix multi-region (#5325) (@xudaotutou)
+* f9f3c8e7db12778f7c45d7d986044c2cbefd0645: fix(devbox):fix version control (#5334) (@xudaotutou)
+* 03c30b8a9eb52e053042bfd7ba55441b674f60c2: fix(devbox):support use deleted template (#5342) (@xudaotutou)
+* 585b50f5a89eb4930881a4eecc181e3eb53924d1: fix(frontend):fix desktop & gpu (#5316) (@xudaotutou)
+* af98fc2eb691457de43be13311b789ab90e83a39: fix: actions upload artifactv4 name (#5258) (@zijiren233)
+* aa585a758bc5b6c6ea00129024b4154fea0887cd: fix: bug (#5262) (@mlhiter)
+* df66830800538dca7f6043bc4df329ddaae6d38a: fix: bug (#5272) (@mlhiter)
+* d3e971e61b69eead19a1e87019299571273f2c24: fix: bug (#5305) (@mlhiter)
+* 0d81eea60804748e5583c9c7b663eac955eab28e: fix: bug (#5310) (@mlhiter)
+* 413b9415c83fbd9290509c8330b448754fc46ef1: fix: checkout (@zijiren233)
+* 95dfd0f7942b3e34aecbfe4799ded2c8e580b4d6: fix: cluster-image-build (@zijiren233)
+* f45112f55f87d05f1f87b230b7ab9a0f5b6f1a3f: fix: db miss dbtype & update operation log (#5315) (@zjy365)
+* c694cd7ef9d3102e3ab2f439d5f204962695ec91: fix: devbox deploy bug version2 (#5312) (@mlhiter)
+* c9bef4dd2cef91779978c86b46ccbb459ad7ffef: fix: devbox detail icon show bug (#5273) (@mlhiter)
+* 21e0b3628310daaaa3a2028d7577d450705a19d7: fix: devbox list big counts bug (#5341) (@mlhiter)
+* f365048b8df92f737ba98e0aef7330f8acd077b0: fix: devbox plugin gzg http bug (#5301) (@mlhiter)
+* d30572b92f33c19892affee18f512ccf607c08be: fix: devbox plugin refresh performance bug (#5276) (@mlhiter)
+* efa09a09a219cace7142b5e5d1ebd6aa5684bc63: fix: devboxList not found “devbox_config” cause plugin activating error (#5259) (@mlhiter)
+* 7d30c3b1b8e71c599551e2727730d1046d63bb7a: fix: digests name (@zijiren233)
+* 9f952b8608659de3bda4b2464580537d9f706ff2: fix: document typo error (#5270) (@liangzhaoliang95)
+* a30c3f972ec4698a1bbf4f515210dde13c7766ce: fix: fail-fast (@zijiren233)
+* 7b94860d50a4a7c10205b0137fff9fdfba18d9db: fix: install remote-ssh manually to unify windsurf and cursor (#5264) (@mlhiter)
+* 684a4bd3a2d97280227a776578589917f7070f4c: fix: launchpad ingress (#5320) (@zjy365)
+* a09058e3e4bbd790c6efc97817bc67c67ace2917: fix: missing dbtype in database (#5302) (@zjy365)
+* d8040f302ec528ab1a8e8be23226c3c568dc5a15: fix: push image (@zijiren233)
+* 7abd32bc558f2bc9ab41286c9f9436c1f6e03aee: fix: reward for real name authentication (#5282) (@zjy365)
+* 401e240af648a694ef3346293fc08904f64ecfbc: fix: save sealos (@zijiren233)
+* 183a66971d08628d995c14b8357bbd0c3f8db86f: fix: save sealos (@zijiren233)
+* b02e31ed64b9ad573e6c427d2e6241c1378d3868: fix: save sealos (@zijiren233)
+* 8483655787d46f10ecc8e61b86b1fa82e9c1a2a4: fix: save sealos (@zijiren233)
+* 503cdb30d3b20765e4f747cc82df001dda826bb9: fix: save sealos (@zijiren233)
+* 5cc442dc03fdf40c92d3b238bb96e22c43cde158: fix: save sealos needs (@zijiren233)
+* f22b9f05a6f9933017c2d452d439832f5098f0aa: fix: secret innherit (@zijiren233)
+* 35fff27c4d437e6685cec282436d10d5f29e24f5: fix: version refresh bug (#5284) (@mlhiter)
+### Documentation updates
+* 95ed066c416486585d9294296b0281fa2cad6f86: doc(devbox): add fqa in devbox doc (#5289) (@cbluebird)
+### Other work
+* 05399c1f86aa362e9a8707f8b2517f8c03f737d6: Add monitor info (#5267) (@wallyxjh)
+* 5793471f527b0ece7a67f86814b666ab888e2a91: Docs: add vercel.json (#5311) (@yangchuansheng)
+* dade357f3f9998210fb6af35d0df9dda89b205fe: Feat runtime (#5280) (@xudaotutou)
+* af8e841fef830d8fe70347fd6e9b7f56d11b8b5e: Fix devbox name regx (#5340) (@xudaotutou)
+* e95bee929859ca7c4a9a269635c8adc05b369180: Update Quick installation of Java Apps.md (#5265) (@Raxcl)
+* 96b51a33ccd067f87a7b2cbde2b32111b2f40a1c: add gpu resource (#5331) (@zjy365)
+* 4826c625bc2302ba778c0d344b21d08b2fec6efb: docs(website): Update announcement bar with dynamic content (#5313) (@yangchuansheng)
+* b6c41c0ab66c298f24ea2426d2e38574269e8961: docs: delete docs/blog. (#5329) (@lingdie)
+* bfbff3f232b3e5d80ba56c6270e33f71c857106e: fix monitor info (#5278) (@wallyxjh)
+* 5b10979857ca23a377890d870720b0b73fd46928: optimize limitrange ephemeral storage (#5260) (@bxy4543)
+* c810e22047d8be4c854b8381f96761935cc54fdf: perf: devbox ide button style and perf (#5268) (@mlhiter)
+* 108682b581e72a5dabbd8c837e14f54e0100aa25: refactor(docs): simplify announcement bar configuration (#5314) (@yangchuansheng)
+* b46d3763cde4b084f131bf5dbc041ba7087ccf51: step1: copy runtime config to devbox crd, add runtime id. (#5326) (@lingdie)
+* df6eef64c23a9d1d9c3117cfa5a0a73cf8268562: step2: change pod create logic from devbox config, delete runtime and runtimeclass crd. (#5328) (@lingdie)
+* 3ba1b7b68fcfd0bce88aeb860e7b1dcd08c99aa0: support custom describe (#5318) (@bxy4543)
+* 095ac52ef09f4a88423f3ccb0071ee1d798abc64: update cloud objectstorage workflow (#5295) (@nowinkeyy)
+* b0399cd3d90d3d9906a92e417b9e39822520ab4a: update clusterrole (#5292) (@nowinkeyy)
+* 5dcad33600427e27dee1484fe6a9a4437d74f914: update clusterrole (#5294) (@nowinkeyy)
+* 795867ee280f97b7cd1cc4032a0c532c0ef96dc6: update sealos mongo version to 6.0 (#5271) (@wallyxjh)
+
+**Full Changelog**: https://github.com/zijiren233/sealos/compare/v5.0.1-beta3.9...v5.0.1-beta3.14
+
+See [the CHANGELOG](https://github.com/zijiren233/sealos/blob/main/CHANGELOG/CHANGELOG.md) for more details.
+
+Your patronage towards Sealos is greatly appreciated 🎉🎉.
+
+If you encounter any problems during its usage, please create an issue in the [GitHub repository](https://github.com/zijiren233/sealos), we're committed to resolving your problem as soon as possible.
