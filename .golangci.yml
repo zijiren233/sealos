@@ -69,7 +69,6 @@ linters:
     - usetesting
     - wastedassign
     - whitespace
-    - wsl_v5
   exclusions:
     generated: lax
     presets:
@@ -116,9 +115,6 @@ linters:
     gosec:
       excludes:
         - G404
-    wsl_v5:
-      allow-whole-block: true
-      branch-max-lines: 4
 
 formatters:
   enable:
