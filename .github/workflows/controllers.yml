@@ -86,7 +86,8 @@ jobs:
         with:
           version: v2.3.0
           working-directory: ${{ matrix.workdir }}
-          args: --color always --config ${{ github.workspace }}/.golangci.yml
+          # args between =, not space
+          args: --color=always --config=${{ github.workspace }}/.golangci.yml
 
   image-build:
     runs-on: ubuntu-24.04
