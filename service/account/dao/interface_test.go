@@ -8,22 +8,30 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labring/sealos/service/account/helper"
-
 	"github.com/labring/sealos/controllers/pkg/types"
+	"github.com/labring/sealos/service/account/helper"
 )
 
 func TestCockroach_GetPayment(t *testing.T) {
-	db, err := newAccountForTest("", os.Getenv("GLOBAL_COCKROACH_URI"), os.Getenv("LOCAL_COCKROACH_URI"))
+	db, err := newAccountForTest(
+		"",
+		os.Getenv("GLOBAL_COCKROACH_URI"),
+		os.Getenv("LOCAL_COCKROACH_URI"),
+	)
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
-	got, resp, err := db.GetPayment(&types.UserQueryOpts{Owner: "1fgtm0mn"}, &helper.GetPaymentReq{})
+
+	got, resp, err := db.GetPayment(
+		&types.UserQueryOpts{Owner: "1fgtm0mn"},
+		&helper.GetPaymentReq{},
+	)
 	if err != nil {
 		t.Fatalf("GetPayment() error = %v", err)
 		return
 	}
+
 	t.Logf("got = %+v", got)
 	t.Logf("limit resp = %+v", resp)
 }
@@ -34,6 +42,7 @@ func TestMongoDB_GetAppCosts(t *testing.T) {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	appCosts, err := db.GetAppCosts(&helper.AppCostsReq{
 		UserTimeRangeReq: helper.UserTimeRangeReq{
 			TimeRange: helper.TimeRange{
@@ -56,17 +65,23 @@ func TestMongoDB_GetAppCosts(t *testing.T) {
 		t.Fatalf("GetAppCosts() error = %v", err)
 		return
 	}
+
 	t.Logf("appCosts = %+v", appCosts)
 }
 
 func TestCockroach_GetTransfer(t *testing.T) {
 	os.Setenv("LOCAL_REGION", "97925cb0-c8e2-4d52-8b39-d8bf0cbb414a")
 
-	db, err := newAccountForTest("", os.Getenv("GLOBAL_COCKROACH_URI"), os.Getenv("LOCAL_COCKROACH_URI"))
+	db, err := newAccountForTest(
+		"",
+		os.Getenv("GLOBAL_COCKROACH_URI"),
+		os.Getenv("LOCAL_COCKROACH_URI"),
+	)
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	transfer, err := db.GetTransfer(&types.GetTransfersReq{
 		UserQueryOpts: &types.UserQueryOpts{
 			Owner: "q0xeg9z1",
@@ -85,6 +100,7 @@ func TestCockroach_GetTransfer(t *testing.T) {
 		t.Fatalf("GetTransfer() error = %v", err)
 		return
 	}
+
 	t.Logf("timerange = %+v", types.TimeRange{
 		StartTime: time.Now().UTC().Add(-30*time.Hour - 30*time.Minute),
 		EndTime:   time.Now().UTC(),
@@ -94,64 +110,74 @@ func TestCockroach_GetTransfer(t *testing.T) {
 
 func TestMongoDB_GetCostAppList(t *testing.T) {
 	dbCTX := context.Background()
+
 	m, err := newAccountForTest(os.Getenv("MONGO_URI"), "", "")
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	req := helper.GetCostAppListReq{
 		AuthBase: helper.AuthBase{
 			Auth: &helper.Auth{
 				Owner: "E1xAJ0fy4k",
 			},
 		},
-		//Namespace: "ns-hwhbg4vf",
-		//AppType: "APP-STORE",
-		//AppName: "cronicle-ldokpaus",
+		// Namespace: "ns-hwhbg4vf",
+		// AppType: "APP-STORE",
+		// AppName: "cronicle-ldokpaus",
 		LimitReq: helper.LimitReq{
 			Page:     1,
 			PageSize: 5,
 		},
 	}
+
 	appList, err := m.GetCostAppList(req)
 	if err != nil {
 		t.Fatalf("failed to get cost app list: %v", err)
 	}
+
 	t.Logf("len costAppList: %v", len(appList.Apps))
 	t.Logf("costAppList: %#+v", appList)
+
 	b, err := json.MarshalIndent(appList, "", "  ")
 	if err != nil {
 		t.Fatalf("failed to marshal cost app list: %v", err)
 	}
+
 	t.Logf("costAppList json: %s", string(b))
 }
 
 func TestMongoDB_GetCostOverview(t *testing.T) {
 	dbCTX := context.Background()
+
 	m, err := newAccountForTest(os.Getenv("MONGO_URI"), "", "")
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	req := helper.GetCostAppListReq{
 		AuthBase: helper.AuthBase{
 			Auth: &helper.Auth{
 				Owner: "E1xAJ0fy4k",
 			},
 		},
-		//Namespace: "ns-hwhbg4vf",
-		//AppType: "APP",
-		//AppName: "hello-world",
+		// Namespace: "ns-hwhbg4vf",
+		// AppType: "APP",
+		// AppName: "hello-world",
 	}
 
 	/*
@@ -207,24 +233,31 @@ func TestMongoDB_GetCostOverview(t *testing.T) {
 
 	for _, appType := range []string{"", "DB", "APP", "APP-STORE", "TERMINAL", "JOB"} {
 		req.AppType = appType
+
 		for i := 1; i <= 10; i++ {
 			for j := 1; j <= 10; j++ {
 				req.LimitReq = helper.LimitReq{
 					Page:     i,
 					PageSize: j,
 				}
+
 				appList, err := m.GetCostOverview(req)
 				if err != nil {
 					t.Fatalf("failed to get cost app list: %v", err)
 				}
+
 				if len(appList.Overviews) != GetCurrentPageItemCount(int(appList.Total), j, i) {
 					fmt.Printf("limit: %#+v\n", req.LimitReq)
 					fmt.Printf("total: %v\n", appList.Total)
-					t.Fatalf("len costAppList: %v, not equal getPageCount: %v", len(appList.Overviews), GetCurrentPageItemCount(int(appList.Total), j, i))
+					t.Fatalf(
+						"len costAppList: %v, not equal getPageCount: %v",
+						len(appList.Overviews),
+						GetCurrentPageItemCount(int(appList.Total), j, i),
+					)
 				}
 
 				t.Logf("len costAppList: %v", len(appList.Overviews))
-				//t.Logf("costAppList: %#+v", appList)
+				// t.Logf("costAppList: %#+v", appList)
 
 				// 转json
 				if len(appList.Overviews) != 0 {
@@ -232,21 +265,23 @@ func TestMongoDB_GetCostOverview(t *testing.T) {
 					if err != nil {
 						t.Fatalf("failed to marshal cost app list: %v", err)
 					}
+
 					t.Logf("costoverview json: %s", string(b))
 				}
+
 				t.Logf("success: %#+v", req.LimitReq)
 			}
 		}
 	}
 
-	//req.LimitReq = helper.LimitReq{
+	// req.LimitReq = helper.LimitReq{
 	//	Page:     2,
 	//	PageSize: 2,
 	//}
 	////req.AppType = "APP-STORE"
-	//req.AppName = "rustdesk-ijhdszru"
-	//appList, err := m.GetCostOverview(req)
-	//if err != nil {
+	// req.AppName = "rustdesk-ijhdszru"
+	// appList, err := m.GetCostOverview(req)
+	// if err != nil {
 	//	t.Fatalf("failed to get cost app list: %v", err)
 	//}
 	//if len(appList.Overviews) != GetCurrentPageItemCount(int(appList.Total), req.PageSize, req.Page) {
@@ -278,6 +313,7 @@ func GetCurrentPageItemCount(totalItems, pageSize, currentPage int) int {
 		if currentPage == 1 {
 			return totalItems
 		}
+
 		return 0
 	}
 
@@ -318,66 +354,76 @@ func TestUnmarshal_Config(t *testing.T) {
 			},
 		},
 	}
+
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("failed to marshal config: %v", err)
 	}
+
 	t.Logf("config json: \n%s", string(b))
 }
 
 func TestMongoDB_GetBasicCostDistribution(t *testing.T) {
 	dbCTX := context.Background()
+
 	m, err := newAccountForTest(os.Getenv("MONGO_URI"), "", "")
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	req := helper.GetCostAppListReq{
 		AuthBase: helper.AuthBase{
 			Auth: &helper.Auth{
 				Owner: "5uxfy8jl",
 			},
 		},
-		//Namespace: "ns-hwhbg4vf",
+		// Namespace: "ns-hwhbg4vf",
 		AppType: "APP-STORE",
-		//AppName: "cronicle-ldokpaus",
+		// AppName: "cronicle-ldokpaus",
 		LimitReq: helper.LimitReq{
 			Page:     1,
 			PageSize: 5,
 		},
 	}
+
 	appList, err := m.GetBasicCostDistribution(req)
 	if err != nil {
 		t.Fatalf("failed to get cost app list: %v", err)
 	}
+
 	t.Logf("costAppList: %v", appList)
 }
 
 func TestMongoDB_GetAppCostTimeRange(t *testing.T) {
 	dbCTX := context.Background()
+
 	m, err := newAccountForTest(os.Getenv("MONGO_URI"), "", "")
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	req := helper.GetCostAppListReq{
 		AuthBase: helper.AuthBase{
 			Auth: &helper.Auth{
 				Owner: "5uxfy8jl",
 			},
 		},
-		//Namespace: "ns-hwhbg4vf",
-		//AppType: "APP-STORE",
+		// Namespace: "ns-hwhbg4vf",
+		// AppType: "APP-STORE",
 		AppType: "DB",
 		AppName: "test",
 		LimitReq: helper.LimitReq{
@@ -385,25 +431,30 @@ func TestMongoDB_GetAppCostTimeRange(t *testing.T) {
 			PageSize: 5,
 		},
 	}
+
 	timeRange, err := m.GetAppCostTimeRange(req)
 	if err != nil {
 		t.Fatalf("failed to get cost app list: %v", err)
 	}
+
 	t.Logf("costAppList: %v", timeRange)
 }
 
 func TestMongoDB_GetConsumptionAmount(t *testing.T) {
 	dbCTX := context.Background()
+
 	m, err := newAccountForTest(os.Getenv("MONGO_URI"), "", "")
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	req := helper.GetCostAppListReq{
 		AuthBase: helper.AuthBase{
 			Auth: &helper.Auth{
@@ -422,16 +473,21 @@ func TestMongoDB_GetConsumptionAmount(t *testing.T) {
 			Page:     1,
 		},
 	}
+
 	costs, err := m.GetCostOverview(req)
 	if err != nil {
 		t.Fatalf("failed to get cost app list: %v", err)
 	}
+
 	t.Logf("GetCostOverview: %v", costs)
+
 	amountAll := int64(0)
 	for _, cost := range costs.Overviews {
 		amountAll += cost.Amount
 	}
+
 	t.Logf("amountAll: %v", amountAll)
+
 	amount2, err := m.GetConsumptionAmount(helper.ConsumptionRecordReq{
 		AuthBase: helper.AuthBase{
 			Auth: &helper.Auth{
@@ -449,21 +505,25 @@ func TestMongoDB_GetConsumptionAmount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get cost app list: %v", err)
 	}
+
 	t.Logf("GetConsumptionAmount: %v", amount2)
 }
 
 func TestMongoDB_GetAppCost1(t *testing.T) {
 	dbCTX := context.Background()
+
 	m, err := newAccountForTest(os.Getenv("MONGO_URI"), "", "")
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	req := &helper.AppCostsReq{
 		UserTimeRangeReq: helper.UserTimeRangeReq{
 			TimeRange: helper.TimeRange{
@@ -476,14 +536,14 @@ func TestMongoDB_GetAppCost1(t *testing.T) {
 				},
 			},
 		},
-		//Namespace: "ns-hwhbg4vf",
-		//AppType: "APP",
-		//AppName: "hello-world",
+		// Namespace: "ns-hwhbg4vf",
+		// AppType: "APP",
+		// AppName: "hello-world",
 		Page:     1,
 		PageSize: 10,
 	}
 
-	//for _, appType := range []string{"", "DB", "APP", "APP-STORE", "TERMINAL", "JOB"} {
+	// for _, appType := range []string{"", "DB", "APP", "APP-STORE", "TERMINAL", "JOB"} {
 	//	req.AppType = appType
 	//	for i := 1; i <= 30; i++ {
 	//		for j := 1; j <= 30; j++ {
@@ -520,25 +580,34 @@ func TestMongoDB_GetAppCost1(t *testing.T) {
 	req.PageSize = 10
 	req.AppType = "APP-STORE"
 	req.AppName = ""
+
 	appList, err := m.GetAppCosts(req)
 	if err != nil {
 		t.Fatalf("failed to get cost app list: %v", err)
 	}
+
 	t.Logf("costAppList: %#+v", appList)
 }
 
 func TestAccount_ApplyInvoice(t *testing.T) {
 	dbCTX := context.Background()
-	m, err := newAccountForTest(os.Getenv("MONGO_URI"), os.Getenv("GLOBAL_COCKROACH_URI"), os.Getenv("LOCAL_COCKROACH_URI"))
+
+	m, err := newAccountForTest(
+		os.Getenv("MONGO_URI"),
+		os.Getenv("GLOBAL_COCKROACH_URI"),
+		os.Getenv("LOCAL_COCKROACH_URI"),
+	)
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	req := &helper.ApplyInvoiceReq{
 		AuthBase: helper.AuthBase{
 			Auth: &helper.Auth{
@@ -554,10 +623,12 @@ func TestAccount_ApplyInvoice(t *testing.T) {
 		},
 		Detail: "jsonxxxx",
 	}
+
 	_, _, err = m.ApplyInvoice(req)
 	if err != nil {
 		t.Fatalf("failed to apply invoice: %v", err)
 	}
+
 	t.Logf("success to apply invoice")
 
 	invoice, resp, err := m.GetInvoice(&helper.GetInvoiceReq{
@@ -575,22 +646,30 @@ func TestAccount_ApplyInvoice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get invoice: %v", err)
 	}
+
 	t.Logf("invoice: %#+v", invoice)
 	t.Logf("resp: %#+v", resp)
 }
 
 func TestAccount_SetStatusInvoice(t *testing.T) {
 	dbCTX := context.Background()
-	m, err := newAccountForTest(os.Getenv("MONGO_URI"), os.Getenv("GLOBAL_COCKROACH_URI"), os.Getenv("LOCAL_COCKROACH_URI"))
+
+	m, err := newAccountForTest(
+		os.Getenv("MONGO_URI"),
+		os.Getenv("GLOBAL_COCKROACH_URI"),
+		os.Getenv("LOCAL_COCKROACH_URI"),
+	)
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
+
 	defer func() {
 		if err = m.Disconnect(dbCTX); err != nil {
 			t.Errorf("failed to disconnect mongo: error = %v", err)
 		}
 	}()
+
 	err = m.SetStatusInvoice(&helper.SetInvoiceStatusReq{
 		InvoiceIDList: []string{"8WKSA0ECYhSr", "M0Y0dyUhdX9S"},
 		Status:        types.PendingInvoiceStatus,
@@ -601,7 +680,11 @@ func TestAccount_SetStatusInvoice(t *testing.T) {
 }
 
 func TestAccount_UseGiftCode(t *testing.T) {
-	db, err := newAccountForTest("", os.Getenv("GLOBAL_COCKROACH_URI"), os.Getenv("LOCAL_COCKROACH_URI"))
+	db, err := newAccountForTest(
+		"",
+		os.Getenv("GLOBAL_COCKROACH_URI"),
+		os.Getenv("LOCAL_COCKROACH_URI"),
+	)
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
@@ -615,16 +698,20 @@ func TestAccount_UseGiftCode(t *testing.T) {
 			},
 		},
 	})
-
 	if err != nil {
 		t.Fatalf("UseGiftCode() error = %v", err)
 		return
 	}
+
 	t.Logf("giftcode = %+v", giftcode)
 }
 
 func TestAccount_GetUserRealNameInfo(t *testing.T) {
-	db, err := newAccountForTest("", os.Getenv("GLOBAL_COCKROACH_URI"), os.Getenv("LOCAL_COCKROACH_URI"))
+	db, err := newAccountForTest(
+		"",
+		os.Getenv("GLOBAL_COCKROACH_URI"),
+		os.Getenv("LOCAL_COCKROACH_URI"),
+	)
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
@@ -637,16 +724,20 @@ func TestAccount_GetUserRealNameInfo(t *testing.T) {
 			},
 		},
 	})
-
 	if err != nil {
 		t.Fatalf("GetUserRealNameInfo() error = %v", err)
 		return
 	}
+
 	t.Logf("userRealNameInfo = %+v", userRealNameInfo)
 }
 
 func TestAccount_GetEnterpriseRealNameInfo(t *testing.T) {
-	db, err := newAccountForTest("", os.Getenv("GLOBAL_COCKROACH_URI"), os.Getenv("LOCAL_COCKROACH_URI"))
+	db, err := newAccountForTest(
+		"",
+		os.Getenv("GLOBAL_COCKROACH_URI"),
+		os.Getenv("LOCAL_COCKROACH_URI"),
+	)
 	if err != nil {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
@@ -659,11 +750,11 @@ func TestAccount_GetEnterpriseRealNameInfo(t *testing.T) {
 			},
 		},
 	})
-
 	if err != nil {
 		t.Fatalf("GetUserRealNameInfo() error = %v", err)
 		return
 	}
+
 	t.Logf("enterpriseRealNameInfo = %+v", enterpriseRealNameInfo)
 }
 
@@ -681,11 +772,17 @@ func TestMongoDB_GetMonitorUniqueValues(t *testing.T) {
 		t.Fatalf("NewAccountInterface() error = %v", err)
 		return
 	}
-	monitors, err := db.GetMonitorUniqueValues(time.Now().UTC().Add(-2*time.Minute), time.Now().UTC(), []string{"ns-ufbih5nx", "ns-fb3qejql", "ns-pvq1d3ri", "ns-cyvisdnk"})
+
+	monitors, err := db.GetMonitorUniqueValues(
+		time.Now().UTC().Add(-2*time.Minute),
+		time.Now().UTC(),
+		[]string{"ns-ufbih5nx", "ns-fb3qejql", "ns-pvq1d3ri", "ns-cyvisdnk"},
+	)
 	if err != nil {
 		t.Fatalf("GetMonitorUniqueValues() error = %v", err)
 		return
 	}
+
 	for _, monitor := range monitors {
 		t.Logf("monitor = %+v\n", monitor)
 	}
@@ -696,6 +793,7 @@ func TestAccount_ReconcileUnsettledLLMBilling(t *testing.T) {
 		MongoDB   *MongoDB
 		Cockroach *Cockroach
 	}
+
 	tests := []struct {
 		name    string
 		fields  fields

@@ -94,6 +94,8 @@ linters:
     errcheck:
       check-type-assertions: true
     forbidigo:
+      forbid:
+        - pattern: ^print(ln)?$
       analyze-types: true
     prealloc:
       for-loops: true

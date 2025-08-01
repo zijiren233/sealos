@@ -11,37 +11,32 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/gin-gonic/gin"
 	"github.com/labring/sealos/controllers/pkg/utils/env"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"github.com/labring/sealos/service/account/docs"
-
-	"github.com/labring/sealos/service/account/dao"
-
 	"github.com/labring/sealos/service/account/api"
-
+	"github.com/labring/sealos/service/account/dao"
+	"github.com/labring/sealos/service/account/docs"
 	"github.com/labring/sealos/service/account/helper"
-
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-
-	"github.com/gin-gonic/gin"
 )
 
 func RegisterPayRouter() {
 	router := gin.Default()
+
 	ctx := context.Background()
 	if err := dao.Init(ctx); err != nil {
 		log.Fatalf("Error initializing database: %v", err)
 	}
+
 	defer func() {
 		if err := dao.DBClient.Disconnect(ctx); err != nil {
 			log.Fatalf("Error disconnecting database: %v", err)
 		}
 	}()
+
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	// /account/v1alpha1/{/namespaces | /properties | {/costs | /costs/recharge | /costs/consumption | /costs/properties}}
 	router.Group(helper.GROUP).
@@ -104,18 +99,22 @@ func RegisterPayRouter() {
 		adminGroup.POST(helper.AdminFlushSubQuota, api.AdminFlushSubscriptionQuota)
 
 		processor := api.NewSubscriptionProcessor(dao.DBClient.GetGlobalDB())
+
 		err := api.InitSubscriptionProcessorTables(dao.DBClient.GetGlobalDB())
 		if err != nil {
 			log.Fatalf("Error initializing subscription processor tables: %v", err)
 		}
+
 		go processor.StartProcessing(ctx)
+
 		if os.Getenv(helper.EnvKycProcessEnabled) == _true {
 			go processor.StartKYCProcessing(ctx)
 		}
-		//go processor.StartFlushQuotaProcessing(ctx)
+		// go processor.StartFlushQuotaProcessing(ctx)
 	}
-	//POST(helper.AdminActiveBilling, api.AdminActiveBilling)
+	// POST(helper.AdminActiveBilling, api.AdminActiveBilling)
 	docs.SwaggerInfo.Host = env.GetEnvWithDefault("SWAGGER_HOST", "localhost:2333")
+
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy"})
@@ -130,6 +129,7 @@ func RegisterPayRouter() {
 		Addr:    ":2333",
 		Handler: router,
 	}
+
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %s\n", err)
@@ -139,8 +139,10 @@ func RegisterPayRouter() {
 	// process task
 	if os.Getenv("REWARD_PROCESSING") == _true {
 		fmt.Println("Start reward processing timer")
+
 		go startRewardProcessingTimer(ctx)
 	}
+
 	dao.BillingTask.Start()
 	// process llm task
 	go startReconcileBilling(ctx)
@@ -153,6 +155,7 @@ func RegisterPayRouter() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown: ", err)
 	}
@@ -167,6 +170,7 @@ func RegisterPayRouter() {
 func startRewardProcessingTimer(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ticker.C:
@@ -189,6 +193,7 @@ func startReconcileBilling(ctx context.Context) {
 	tickerTime, err := time.ParseDuration(env.GetEnvWithDefault("BILLING_RECONCILE_INTERVAL", "5s"))
 	if err != nil {
 		logrus.Errorf("Failed to parse LLM_BILLING_RECONCILE_INTERVAL: %v", err)
+
 		tickerTime = 5 * time.Second
 	}
 	// create a timer and execute it once every minute
@@ -213,7 +218,7 @@ func startReconcileBilling(ctx context.Context) {
 		case t := <-ticker.C:
 			currentTime := t.UTC()
 			lastTime := lastReconcileTime.Load().(time.Time)
-			//doBillingReconcile(lastTime, currentTime)
+			// doBillingReconcile(lastTime, currentTime)
 			dao.BillingTask.AddTask(&dao.ActiveBillingReconcile{
 				StartTime: lastTime,
 				EndTime:   currentTime,
@@ -225,13 +230,25 @@ func startReconcileBilling(ctx context.Context) {
 
 func startHourlyBillingActiveArchive(ctx context.Context) {
 	logrus.Info("Starting hourly billing active archive service")
+
 	now := time.Now().UTC()
-	lastHourStart := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()-1, 0, 0, 0, now.Location())
+	lastHourStart := time.Date(
+		now.Year(),
+		now.Month(),
+		now.Day(),
+		now.Hour()-1,
+		0,
+		0,
+		0,
+		now.Location(),
+	)
 
 	dao.BillingTask.AddTask(&dao.ArchiveBillingReconcile{
 		StartTime: lastHourStart,
 	})
+
 	nextHour := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, now.Location())
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -242,6 +259,7 @@ func startHourlyBillingActiveArchive(ctx context.Context) {
 			dao.BillingTask.AddTask(&dao.ArchiveBillingReconcile{
 				StartTime: currentHour,
 			})
+
 			nextHour = nextHour.Add(time.Hour)
 		}
 	}

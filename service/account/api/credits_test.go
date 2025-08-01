@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labring/sealos/service/account/dao"
-
 	"github.com/google/uuid"
+	"github.com/labring/sealos/service/account/dao"
 )
 
 func Test_getCreditsInfo(t *testing.T) {
@@ -15,13 +14,16 @@ func Test_getCreditsInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to parse UUID: %v", err)
 	}
+
 	os.Setenv("LOCAL_REGION", "")
+
 	dao.DBClient, err = dao.NewAccountForTest("", "", "")
 	if err != nil {
 		t.Fatalf("failed to create DB client: %v", err)
 	}
 
 	start := time.Now()
+
 	userCreditsInfo, err := getCreditsInfo(userUID)
 	if err != nil {
 		t.Fatalf("getCreditsInfo() error = %v", err)

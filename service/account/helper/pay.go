@@ -48,11 +48,11 @@ func ParseCreatePayReq(c *gin.Context) (*CreatePayReq, error) {
 	if err := c.ShouldBindJSON(req); err != nil {
 		return nil, err
 	}
+
 	return req, nil
 }
 
 type CardOperationReq struct {
-
 	// @Summary Authentication information
 	// @Description Authentication information
 	AuthBase `json:",inline" bson:",inline"`
@@ -65,6 +65,7 @@ func ParseCardOperationReq(c *gin.Context) (*CardOperationReq, error) {
 	if err := c.ShouldBindJSON(req); err != nil {
 		return nil, err
 	}
+
 	return req, nil
 }
 
@@ -109,6 +110,7 @@ func ParseSubscriptionOperatorReq(c *gin.Context) (*SubscriptionOperatorReq, err
 	if err := c.ShouldBindJSON(req); err != nil {
 		return nil, err
 	}
+
 	return req, nil
 }
 
@@ -131,11 +133,12 @@ func ParseSubscriptionQuotaCheckReq(c *gin.Context) (*SubscriptionQuotaCheckReq,
 	if err := c.ShouldBindJSON(req); err != nil {
 		return nil, err
 	}
+
 	return req, nil
 }
 
 type SubscriptionQuotaCheckResp struct {
-	//allWorkspaceReady
+	// allWorkspaceReady
 	AllWorkspaceReady bool `json:"allWorkspaceReady" bson:"allWorkspaceReady" example:"true"`
 
 	ReadyWorkspace []string `json:"readyWorkspace" bson:"readyWorkspace" example:"workspace1,workspace2"`

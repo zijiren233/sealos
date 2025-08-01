@@ -17,12 +17,13 @@ type TaskQueue struct {
 	queue   chan Task
 	workers int
 	wg      sync.WaitGroup
-	//mu      sync.Mutex
+	// mu      sync.Mutex
 	started bool
 }
 
 func NewTaskQueue(ctx context.Context, workerCount, queueSize int) *TaskQueue {
 	ctx, cancel := context.WithCancel(ctx)
+
 	return &TaskQueue{
 		ctx:     ctx,
 		queue:   make(chan Task, queueSize),
@@ -32,11 +33,11 @@ func NewTaskQueue(ctx context.Context, workerCount, queueSize int) *TaskQueue {
 }
 
 func (tq *TaskQueue) AddTask(task Task) {
-	//tq.mu.Lock()
-	//defer tq.mu.Unlock()
-	//if tq.started {
+	// tq.mu.Lock()
+	// defer tq.mu.Unlock()
+	// if tq.started {
 	//	tq.queue <- task
-	//} else {
+	// } else {
 	//	fmt.Println("TaskQueue has not been started yet")
 	//}
 	select {
@@ -50,9 +51,11 @@ func (tq *TaskQueue) Start() {
 	if tq.started {
 		return
 	}
+
 	tq.started = true
 	for i := 0; i < tq.workers; i++ {
 		tq.wg.Add(1)
+
 		go tq.worker(i)
 	}
 }
@@ -66,6 +69,7 @@ func (tq *TaskQueue) Stop() {
 
 func (tq *TaskQueue) worker(id int) {
 	defer tq.wg.Done()
+
 	for {
 		select {
 		case <-tq.ctx.Done():
@@ -74,6 +78,7 @@ func (tq *TaskQueue) worker(id int) {
 			if !ok {
 				return
 			}
+
 			if err := task.Execute(); err != nil {
 				// TODO handle task execution failures
 				logrus.Errorf("Worker %d failed to process task: %v", id, err)
