@@ -33,13 +33,12 @@ return [
 `
 )
 
-var (
-	adminerPHPTmpl = template.Must(template.New("plugin").Parse(adminerPHPTemplate))
-)
+var adminerPHPTmpl = template.Must(template.New("plugin").Parse(adminerPHPTemplate))
 
 func buildConnectionFileContent(connections []string) string {
 	// TODO: support custom key name
 	connectionMap := map[string]string{}
+
 	for _, connection := range connections {
 		urlObj, err := url.Parse(connection)
 		if err != nil {
@@ -48,6 +47,7 @@ func buildConnectionFileContent(connections []string) string {
 		}
 
 		hostname := urlObj.Hostname()
+
 		colon := strings.IndexByte(hostname, '.')
 		if colon != -1 {
 			hostname = hostname[:colon]
@@ -56,20 +56,23 @@ func buildConnectionFileContent(connections []string) string {
 		connectionMap[hostname] = connection
 	}
 
-	content, err := renderTemplate(adminerPHPTmpl, map[string]interface{}{
+	content, err := renderTemplate(adminerPHPTmpl, map[string]any{
 		"connectionMap": connectionMap,
 	})
 	if err != nil {
 		ctrl.Log.WithName("build").V(1).Info("create connection php file failed", "err", err)
 	}
+
 	return content
 }
 
-func renderTemplate(tmpl *template.Template, data map[string]interface{}) (string, error) {
+func renderTemplate(tmpl *template.Template, data map[string]any) (string, error) {
 	var out bytes.Buffer
+
 	err := tmpl.Execute(&out, data)
 	if err != nil {
 		return "", err
 	}
+
 	return out.String(), nil
 }

@@ -20,17 +20,20 @@ import (
 	"fmt"
 	"strings"
 
+	adminerv1 "github.com/labring/sealos/controllers/db/adminer/api/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	adminerv1 "github.com/labring/sealos/controllers/db/adminer/api/v1"
 )
 
-func (r *AdminerReconciler) createNginxIngress(adminer *adminerv1.Adminer, host string) *networkingv1.Ingress {
+func (r *AdminerReconciler) createNginxIngress(
+	adminer *adminerv1.Adminer,
+	host string,
+) *networkingv1.Ingress {
 	corsFormat := "https://%s,https://*.%s"
 	if !r.tlsEnabled {
 		corsFormat = "http://%s,http://*.%s"
 	}
+
 	cors := fmt.Sprintf(corsFormat, r.adminerDomain, r.adminerDomain)
 
 	annotations := map[string]string{
@@ -95,6 +98,7 @@ func (r *AdminerReconciler) createNginxIngress(adminer *adminerv1.Adminer, host 
 		}
 		ingress.Spec.TLS = []networkingv1.IngressTLS{tls}
 	}
+
 	return ingress
 }
 
@@ -125,7 +129,11 @@ more_set_headers "%s: %s";
 
 func (r *AdminerReconciler) getNginxConfigurationSnippet() string {
 	if defaultConfigDomain != r.adminerDomain {
-		return strings.ReplaceAll(defaultNginxConfigurationSnippet, defaultConfigDomain, r.adminerDomain)
+		return strings.ReplaceAll(
+			defaultNginxConfigurationSnippet,
+			defaultConfigDomain,
+			r.adminerDomain,
+		)
 	}
 
 	return defaultNginxConfigurationSnippet
