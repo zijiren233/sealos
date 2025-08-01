@@ -15,10 +15,10 @@ import (
 
 func Request(addr string, params *bytes.Buffer) ([]byte, error) {
 	resp, err := http.Post(addr, "application/x-www-form-urlencoded", params)
-
 	if err != nil {
 		return nil, err
 	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -36,6 +36,7 @@ func Request(addr string, params *bytes.Buffer) ([]byte, error) {
 
 func GetQuery(query *api.VMRequest) (string, error) {
 	var result string
+
 	switch query.Type {
 	case "cpu":
 		result = "round(sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\",pod=~\"$pod.*\",container!=\"\"}) by (pod) / sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\",pod=~\"$pod.*\"}) by (pod) * 100,0.01)"
@@ -48,14 +49,17 @@ func GetQuery(query *api.VMRequest) (string, error) {
 	default:
 		log.Println(query.Type)
 	}
+
 	podName := getPodName(query.LaunchPadName)
 	result = strings.ReplaceAll(strings.ReplaceAll(result, "$namespace", query.NS), "$pod", podName)
+
 	return result, nil
 }
 
 func getPodName(str string) string {
 	index := strings.LastIndex(str, "-")
 	firstPart := str[:index]
+
 	return firstPart
 }
 
@@ -64,6 +68,7 @@ func VMNew(query *api.VMRequest) ([]byte, error) {
 
 	formData := url.Values{}
 	formData.Set("query", result)
+
 	if query.Range.Start != "" {
 		formData.Set("start", query.Range.Start)
 		formData.Set("end", query.Range.End)
@@ -71,6 +76,7 @@ func VMNew(query *api.VMRequest) ([]byte, error) {
 	} else if query.Range.Time != "" {
 		formData.Set("time", query.Range.Time)
 	}
+
 	bf := bytes.NewBufferString(formData.Encode())
 
 	vmHost := GetVMServerFromEnv()
@@ -82,6 +88,7 @@ func VMNew(query *api.VMRequest) ([]byte, error) {
 	if len(formData.Get("start")) == 0 {
 		return Request(vmHost+"/api/v1/query", bf)
 	}
+
 	return Request(vmHost+"/api/v1/query_range", bf)
 }
 
