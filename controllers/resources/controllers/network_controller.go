@@ -18,13 +18,14 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -63,10 +64,12 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	logger.Info("Reconciling Network")
 	// Fetch the namespace
 	ns := corev1.Namespace{}
+
 	keyObj := client.ObjectKey{Name: req.Namespace}
 	if req.Namespace == "" && req.Name != "" {
 		keyObj = client.ObjectKey{Name: req.Name}
 	}
+
 	if err := r.Client.Get(ctx, keyObj, &ns); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -95,18 +98,21 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	switch networkStatus {
 	case NetworkSuspend:
 		// If NamespacedName.Namespace is empty, then req is the namespace itself, and req.namespacedname.name is the Name of the namespace
-		if req.NamespacedName.Namespace == "" {
+		if req.Namespace == "" {
 			// Handle namespace suspension
 			if err := r.suspendNetworkResources(ctx, req.Name); err != nil {
 				logger.Error(err, "failed to suspend network resources")
 				return ctrl.Result{}, err
 			}
+
 			break
 		}
+
 		if err := r.handleResource(ctx, req.NamespacedName, ns); err != nil {
 			logger.Error(err, "failed to handle resource")
 			return ctrl.Result{}, err
 		}
+
 		return ctrl.Result{}, nil
 	case NetworkResume:
 		namespace := req.Namespace
@@ -122,19 +128,24 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if ns.Annotations == nil {
 			ns.Annotations = make(map[string]string)
 		}
+
 		ns.Annotations[NetworkStatusAnnoKey] = NetworkResumeCompleted
 		if err := r.Client.Update(ctx, &ns); err != nil {
 			logger.Error(err, "failed to update namespace network status to ResumeCompleted")
 			return ctrl.Result{}, err
 		}
 	default:
-		logger.Error(fmt.Errorf("unknown network status"), "", "status", networkStatus)
+		logger.Error(errors.New("unknown network status"), "", "status", networkStatus)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkReconciler) handleResource(ctx context.Context, key client.ObjectKey, ns corev1.Namespace) error {
+func (r *NetworkReconciler) handleResource(
+	ctx context.Context,
+	key client.ObjectKey,
+	ns corev1.Namespace,
+) error {
 	// Only process resources in suspended namespaces
 	networkStatus, ok := ns.Annotations[NetworkStatusAnnoKey]
 	if !ok || networkStatus != NetworkSuspend {
@@ -147,34 +158,42 @@ func (r *NetworkReconciler) handleResource(ctx context.Context, key client.Objec
 		if ingress.Annotations == nil {
 			ingress.Annotations = make(map[string]string)
 		}
+
 		if ingress.Annotations[IngressClassKey] != Disable {
 			ingress.Annotations[IngressClassKey] = Disable
 			if err := r.Client.Update(ctx, &ingress); err != nil {
 				return fmt.Errorf("failed to suspend ingress %s: %w", key.Name, err)
 			}
+
 			r.Log.V(1).Info("Suspended ingress", "name", key.Name)
 		}
+
 		return nil
-	} else if !errors.IsNotFound(err) {
+	} else if !kerrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get ingress %s: %w", key.Name, err)
 	}
 
 	// Try fetching as Service
 	svc := corev1.Service{}
 	if err := r.Client.Get(ctx, key, &svc); err == nil {
-		if svc.Spec.Type == corev1.ServiceTypeNodePort && (svc.Labels == nil || svc.Labels[NodePortLabelKey] != True) {
+		if svc.Spec.Type == corev1.ServiceTypeNodePort &&
+			(svc.Labels == nil || svc.Labels[NodePortLabelKey] != True) {
 			if svc.Labels == nil {
 				svc.Labels = make(map[string]string)
 			}
+
 			svc.Labels[NodePortLabelKey] = True
+
 			svc.Spec.Type = corev1.ServiceTypeClusterIP
 			if err := r.Client.Update(ctx, &svc); err != nil {
 				return fmt.Errorf("failed to suspend service %s: %w", key.Name, err)
 			}
+
 			r.Log.V(1).Info("Suspended service", "name", key.Name)
 		}
+
 		return nil
-	} else if !errors.IsNotFound(err) {
+	} else if !kerrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get service %s: %w", key.Name, err)
 	}
 
@@ -187,15 +206,18 @@ func (r *NetworkReconciler) suspendNetworkResources(ctx context.Context, namespa
 	if err := r.Client.List(ctx, &ingressList, client.InNamespace(namespace)); err != nil {
 		return fmt.Errorf("failed to list ingresses in namespace %s: %w", namespace, err)
 	}
+
 	for _, ingress := range ingressList.Items {
 		if ingress.Annotations == nil {
 			ingress.Annotations = make(map[string]string)
 		}
+
 		if ingress.Annotations[IngressClassKey] != Disable {
 			ingress.Annotations[IngressClassKey] = Disable
 			if err := r.Client.Update(ctx, &ingress); err != nil {
 				return fmt.Errorf("failed to suspend ingress %s: %w", ingress.Name, err)
 			}
+
 			r.Log.V(1).Info("Suspended ingress", "name", ingress.Name)
 		}
 	}
@@ -205,18 +227,23 @@ func (r *NetworkReconciler) suspendNetworkResources(ctx context.Context, namespa
 	if err := r.Client.List(ctx, &serviceList, client.InNamespace(namespace)); err != nil {
 		return fmt.Errorf("failed to list services in namespace %s: %w", namespace, err)
 	}
+
 	for _, svc := range serviceList.Items {
 		if svc.Spec.Type != corev1.ServiceTypeNodePort {
 			continue
 		}
+
 		if svc.Labels == nil {
 			svc.Labels = make(map[string]string)
 		}
+
 		svc.Labels[NodePortLabelKey] = True
+
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 		if err := r.Client.Update(ctx, &svc); err != nil {
 			return fmt.Errorf("failed to suspend service %s: %w", svc.Name, err)
 		}
+
 		r.Log.V(1).Info("Suspended service", "name", svc.Name)
 	}
 
@@ -229,14 +256,17 @@ func (r *NetworkReconciler) resumeNetworkResources(ctx context.Context, namespac
 	if err := r.Client.List(ctx, &ingressList, client.InNamespace(namespace)); err != nil {
 		return fmt.Errorf("failed to list ingresses in namespace %s: %w", namespace, err)
 	}
+
 	for _, ingress := range ingressList.Items {
 		if ingress.Annotations == nil || ingress.Annotations[IngressClassKey] != Disable {
 			continue
 		}
+
 		ingress.Annotations[IngressClassKey] = "nginx"
 		if err := r.Client.Update(ctx, &ingress); err != nil {
 			return fmt.Errorf("failed to resume ingress %s: %w", ingress.Name, err)
 		}
+
 		r.Log.V(1).Info("Resumed ingress", "name", ingress.Name)
 	}
 
@@ -245,15 +275,19 @@ func (r *NetworkReconciler) resumeNetworkResources(ctx context.Context, namespac
 	if err := r.Client.List(ctx, &serviceList, client.InNamespace(namespace)); err != nil {
 		return fmt.Errorf("failed to list services in namespace %s: %w", namespace, err)
 	}
+
 	for _, svc := range serviceList.Items {
 		if svc.Labels == nil || svc.Labels[NodePortLabelKey] != True {
 			continue
 		}
+
 		svc.Spec.Type = corev1.ServiceTypeNodePort
 		delete(svc.Labels, NodePortLabelKey)
+
 		if err := r.Client.Update(ctx, &svc); err != nil {
 			return fmt.Errorf("failed to resume service %s: %w", svc.Name, err)
 		}
+
 		r.Log.V(1).Info("Resumed service", "name", svc.Name)
 	}
 
@@ -266,7 +300,11 @@ type SuspendedNamespaceHandler struct {
 	Logger logr.Logger
 }
 
-func (e *SuspendedNamespaceHandler) Create(ctx context.Context, evt event.TypedCreateEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *SuspendedNamespaceHandler) Create(
+	ctx context.Context,
+	evt event.TypedCreateEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
 	if isNil(evt.Object) {
 		e.Logger.Error(nil, "CreateEvent received with no metadata", "event", evt)
 		return
@@ -290,11 +328,21 @@ func (e *SuspendedNamespaceHandler) Create(ctx context.Context, evt event.TypedC
 	q.Add(item)
 }
 
-func (e *SuspendedNamespaceHandler) Update(ctx context.Context, evt event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *SuspendedNamespaceHandler) Update(
+	ctx context.Context,
+	evt event.TypedUpdateEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
 	if !isNil(evt.ObjectNew) {
 		ns := corev1.Namespace{}
 		if err := e.Client.Get(ctx, types.NamespacedName{Name: evt.ObjectNew.GetNamespace()}, &ns); err != nil {
-			e.Logger.Error(err, "failed to get namespace", "namespace", evt.ObjectNew.GetNamespace())
+			e.Logger.Error(
+				err,
+				"failed to get namespace",
+				"namespace",
+				evt.ObjectNew.GetNamespace(),
+			)
+
 			return
 		}
 
@@ -330,11 +378,19 @@ func (e *SuspendedNamespaceHandler) Update(ctx context.Context, evt event.TypedU
 	}
 }
 
-func (e *SuspendedNamespaceHandler) Delete(ctx context.Context, evt event.TypedDeleteEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *SuspendedNamespaceHandler) Delete(
+	ctx context.Context,
+	evt event.TypedDeleteEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
 	// No action needed for delete events
 }
 
-func (e *SuspendedNamespaceHandler) Generic(ctx context.Context, evt event.TypedGenericEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *SuspendedNamespaceHandler) Generic(
+	ctx context.Context,
+	evt event.TypedGenericEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
+) {
 	// No action needed for generic events
 }
 
@@ -347,6 +403,7 @@ func isNil(arg any) bool {
 		v.Kind() == reflect.Func) && v.IsNil()) {
 		return true
 	}
+
 	return false
 }
 
@@ -369,7 +426,8 @@ func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					if !ok {
 						return false
 					}
-					return newIngress.Annotations != nil && newIngress.Annotations[IngressClassKey] != Disable
+					return newIngress.Annotations != nil &&
+						newIngress.Annotations[IngressClassKey] != Disable
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool {
 					return false
@@ -395,7 +453,8 @@ func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					if !ok {
 						return false
 					}
-					return newSvc.Spec.Type == corev1.ServiceTypeNodePort && (newSvc.Labels == nil || newSvc.Labels[NodePortLabelKey] != True)
+					return newSvc.Spec.Type == corev1.ServiceTypeNodePort &&
+						(newSvc.Labels == nil || newSvc.Labels[NodePortLabelKey] != True)
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool {
 					return false
@@ -420,12 +479,15 @@ func (NetworkAnnotationPredicate) Create(e event.CreateEvent) bool {
 
 func (NetworkAnnotationPredicate) Update(e event.UpdateEvent) bool {
 	oldObj, ok1 := e.ObjectOld.(*corev1.Namespace)
+
 	newObj, ok2 := e.ObjectNew.(*corev1.Namespace)
 	if !ok1 || !ok2 || newObj.Annotations == nil {
 		return false
 	}
+
 	oldStatus := oldObj.Annotations[NetworkStatusAnnoKey]
 	newStatus := newObj.Annotations[NetworkStatusAnnoKey]
+
 	return oldStatus != newStatus && newStatus != NetworkResumeCompleted
 }
 
