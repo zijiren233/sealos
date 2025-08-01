@@ -15,10 +15,10 @@ import (
 
 func Request(addr string, params *bytes.Buffer) ([]byte, error) {
 	resp, err := http.Post(addr, "application/x-www-form-urlencoded", params)
-
 	if err != nil {
 		return nil, err
 	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -41,6 +41,7 @@ func PrometheusPre(query *api.PromRequest) ([]byte, error) {
 
 	formData := url.Values{}
 	formData.Set("query", result)
+
 	if query.Range.Start != "" {
 		formData.Set("start", query.Range.Start)
 		formData.Set("end", query.Range.End)
@@ -48,6 +49,7 @@ func PrometheusPre(query *api.PromRequest) ([]byte, error) {
 	} else if query.Range.Time != "" {
 		formData.Set("time", query.Range.Time)
 	}
+
 	bf := bytes.NewBufferString(formData.Encode())
 
 	prometheusHost := GetPromServerFromEnv()
@@ -61,11 +63,13 @@ func PrometheusPre(query *api.PromRequest) ([]byte, error) {
 	if len(formData.Get("start")) == 0 {
 		return Request(prometheusHost+"/api/v1/query", bf)
 	}
+
 	return Request(prometheusHost+"/api/v1/query_range", bf)
 }
 
 func GetQuery(query *api.PromRequest) (string, error) {
 	var result string
+
 	switch query.Type {
 	case "apecloud-mysql":
 		result = api.Mysql[query.Query]
@@ -84,12 +88,15 @@ func GetQuery(query *api.PromRequest) (string, error) {
 	}
 
 	fmt.Println(query.Cluster)
+
 	if query.Type == "minio" {
 		instance := os.Getenv("OBJECT_STORAGE_INSTANCE")
 		result = strings.ReplaceAll(result, "#", instance)
 	}
+
 	result = strings.ReplaceAll(result, "#", query.NS)
 	result = strings.ReplaceAll(result, "@", query.Cluster)
+
 	return result, nil
 }
 
@@ -99,6 +106,7 @@ func PrometheusNew(query *api.PromRequest) ([]byte, error) {
 
 	formData := url.Values{}
 	formData.Set("query", result)
+
 	if query.Range.Start != "" {
 		formData.Set("start", query.Range.Start)
 		formData.Set("end", query.Range.End)
@@ -106,6 +114,7 @@ func PrometheusNew(query *api.PromRequest) ([]byte, error) {
 	} else if query.Range.Time != "" {
 		formData.Set("time", query.Range.Time)
 	}
+
 	bf := bytes.NewBufferString(formData.Encode())
 
 	prometheusHost := GetPromServerFromEnv()
@@ -119,6 +128,7 @@ func PrometheusNew(query *api.PromRequest) ([]byte, error) {
 	if len(formData.Get("start")) == 0 {
 		return Request(prometheusHost+"/api/v1/query", bf)
 	}
+
 	return Request(prometheusHost+"/api/v1/query_range", bf)
 }
 
