@@ -31,7 +31,9 @@ func (c *SMTPConfig) SendEmail(emailBody, to string) error {
 	m.SetAddressHeader("From", c.FromEmail, c.EmailTitle)
 	m.SetHeader("Subject", c.EmailTitle)
 	m.SetBody("text/html", emailBody)
+
 	d := gomail.NewDialer(c.ServerHost, c.ServerPort, c.Username, c.Passwd)
+
 	return d.DialAndSend(m)
 }
 
@@ -41,6 +43,8 @@ func (c *SMTPConfig) SendEmailWithTitle(subject, emailBody, to string) error {
 	m.SetAddressHeader("From", c.FromEmail, c.EmailTitle)
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", emailBody)
+
 	d := gomail.NewDialer(c.ServerHost, c.ServerPort, c.Username, c.Passwd)
+
 	return d.DialAndSend(m)
 }

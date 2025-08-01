@@ -17,7 +17,7 @@ limitations under the License.
 package controllers
 
 //
-//import (
+// import (
 //	"context"
 //	"fmt"
 //	"reflect"
@@ -47,7 +47,7 @@ package controllers
 //	"github.com/labring/sealos/controllers/pkg/types"
 //)
 //
-//type ActivityReconciler struct {
+// type ActivityReconciler struct {
 //	client.Client
 //	Scheme   *runtime.Scheme
 //	Logger   logr.Logger

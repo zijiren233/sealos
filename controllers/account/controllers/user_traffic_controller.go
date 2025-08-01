@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -10,15 +11,11 @@ import (
 	"sync"
 	"time"
 
-	utils2 "github.com/labring/sealos/controllers/account/controllers/utils"
-
-	"github.com/labring/sealos/controllers/pkg/utils"
-
-	"github.com/labring/sealos/controllers/pkg/database"
-
 	"github.com/google/uuid"
-
+	utils2 "github.com/labring/sealos/controllers/account/controllers/utils"
+	"github.com/labring/sealos/controllers/pkg/database"
 	"github.com/labring/sealos/controllers/pkg/types"
+	"github.com/labring/sealos/controllers/pkg/utils"
 	"gorm.io/gorm"
 )
 
@@ -28,7 +25,10 @@ type UserTrafficController struct {
 	*AccountReconciler
 }
 
-func NewUserTrafficController(ar *AccountReconciler, trafficDBURI database.Interface) *UserTrafficController {
+func NewUserTrafficController(
+	ar *AccountReconciler,
+	trafficDBURI database.Interface,
+) *UserTrafficController {
 	return &UserTrafficController{
 		TrafficDB:         trafficDBURI,
 		GlobalDB:          ar.AccountV2.GetGlobalDB(),
@@ -39,17 +39,25 @@ func NewUserTrafficController(ar *AccountReconciler, trafficDBURI database.Inter
 func (c *UserTrafficController) BatchGetUserUID() (map[string]uuid.UUID, error) {
 	allUser := make(map[string]uuid.UUID)
 	allUserCr := make([]types.RegionUserCr, 0)
-	err := c.AccountV2.GetLocalDB().Model(&types.RegionUserCr{}).Select(`"crName"`, `"userUid"`).Scan(&allUserCr).Error
+
+	err := c.AccountV2.GetLocalDB().
+		Model(&types.RegionUserCr{}).
+		Select(`"crName"`, `"userUid"`).
+		Scan(&allUserCr).
+		Error
 	if err != nil {
-		return nil, fmt.Errorf("failed to get all user CRs: %v", err)
+		return nil, fmt.Errorf("failed to get all user CRs: %w", err)
 	}
+
 	for _, userCr := range allUserCr {
 		if userCr.UserUID == uuid.Nil {
 			c.Logger.Info("user UID is nil, skipping", "crName", userCr.CrName)
 			continue
 		}
+
 		allUser[userCr.CrName] = userCr.UserUID
 	}
+
 	return allUser, nil
 }
 
@@ -62,22 +70,29 @@ func (c *UserTrafficController) processUserTraffic(resultMap map[string]int64) e
 	userUIDMap, err := c.BatchGetUserUID()
 	if err != nil {
 		c.Logger.Error(err, "failed to batch get user uids")
-		return fmt.Errorf("failed to batch get user uids: %v", err)
+		return fmt.Errorf("failed to batch get user uids: %w", err)
 	}
 
-	var trafficRecords []*types.UserTimeRangeTraffic
-	var skippedNamespaces []string
+	var (
+		trafficRecords    []*types.UserTimeRangeTraffic
+		skippedNamespaces []string
+	)
+
 	now := time.Now()
+
 	for namespace, totalBytes := range resultMap {
 		if !strings.HasPrefix(namespace, "ns-") {
 			continue
 		}
+
 		owner := strings.TrimPrefix(namespace, "ns-")
+
 		userUID, exists := userUIDMap[owner]
 		if !exists {
 			skippedNamespaces = append(skippedNamespaces, namespace)
 			continue
 		}
+
 		trafficRecords = append(trafficRecords, &types.UserTimeRangeTraffic{
 			CreatedAt:     now,
 			UpdatedAt:     now,
@@ -87,6 +102,7 @@ func (c *UserTrafficController) processUserTraffic(resultMap map[string]int64) e
 			Status:        types.UserTimeRangeTrafficStatusProcessing,
 		})
 	}
+
 	if len(skippedNamespaces) > 0 {
 		c.Logger.Info("skipped namespaces due to missing users", "namespaces", skippedNamespaces)
 	}
@@ -95,17 +111,20 @@ func (c *UserTrafficController) processUserTraffic(resultMap map[string]int64) e
 	for _, uid := range userUIDMap {
 		userUIDs = append(userUIDs, uid)
 	}
+
 	var existingUserUIDs []uuid.UUID
 	if err := c.GlobalDB.Model(&types.UserTimeRangeTraffic{}).Where("user_uid IN ?", userUIDs).Pluck("user_uid", &existingUserUIDs).Error; err != nil {
 		c.Logger.Error(err, "failed to fetch existing user uids")
-		return fmt.Errorf("failed to fetch existing user uids: %v", err)
+		return fmt.Errorf("failed to fetch existing user uids: %w", err)
 	}
+
 	existingUIDMap := make(map[uuid.UUID]struct{}, len(existingUserUIDs))
 	for _, uid := range existingUserUIDs {
 		existingUIDMap[uid] = struct{}{}
 	}
 
 	var toInsert, toUpdate []*types.UserTimeRangeTraffic
+
 	for _, record := range trafficRecords {
 		if _, exists := existingUIDMap[record.UserUID]; exists {
 			toUpdate = append(toUpdate, record)
@@ -132,33 +151,56 @@ func (c *UserTrafficController) processBatchInserts(records []*types.UserTimeRan
 	if len(records) == 0 {
 		return nil
 	}
+
 	for i := 0; i < len(records); i += batchSize {
 		end := i + batchSize
 		if end > len(records) {
 			end = len(records)
 		}
+
 		batch := records[i:end]
+
 		tx := c.GlobalDB.Begin()
 		if tx.Error != nil {
-			c.Logger.Error(tx.Error, "failed to begin transaction for insert batch", "batch_size", len(batch))
-			return fmt.Errorf("failed to begin transaction for insert batch: %v", tx.Error)
+			c.Logger.Error(
+				tx.Error,
+				"failed to begin transaction for insert batch",
+				"batch_size",
+				len(batch),
+			)
+
+			return fmt.Errorf("failed to begin transaction for insert batch: %w", tx.Error)
 		}
+
 		if err := tx.Create(batch).Error; err != nil {
 			tx.Rollback()
 			c.Logger.Error(err, "failed to batch insert user traffic", "batch_size", len(batch))
-			return fmt.Errorf("failed to batch insert user traffic: %v", err)
+
+			return fmt.Errorf("failed to batch insert user traffic: %w", err)
 		}
+
 		if err := tx.Commit().Error; err != nil {
-			c.Logger.Error(err, "failed to commit transaction for insert batch", "batch_size", len(batch))
-			return fmt.Errorf("failed to commit transaction for insert batch: %v", err)
+			c.Logger.Error(
+				err,
+				"failed to commit transaction for insert batch",
+				"batch_size",
+				len(batch),
+			)
+
+			return fmt.Errorf("failed to commit transaction for insert batch: %w", err)
 		}
+
 		c.Logger.Info("successfully inserted batch", "batch_size", len(batch), "start_index", i)
 	}
+
 	return nil
 }
 
 // processBatchUpdates updates records in batches.
-func (c *UserTrafficController) processBatchUpdates(records []*types.UserTimeRangeTraffic, now time.Time) error {
+func (c *UserTrafficController) processBatchUpdates(
+	records []*types.UserTimeRangeTraffic,
+	now time.Time,
+) error {
 	if len(records) == 0 {
 		return nil
 	}
@@ -168,53 +210,76 @@ func (c *UserTrafficController) processBatchUpdates(records []*types.UserTimeRan
 		if end > len(records) {
 			end = len(records)
 		}
+
 		batch := records[i:end]
 
 		tx := c.GlobalDB.Begin()
 		if tx.Error != nil {
-			c.Logger.Error(tx.Error, "failed to begin transaction for update batch", "batch_size", len(batch))
-			return fmt.Errorf("failed to begin transaction for update batch: %v", tx.Error)
+			c.Logger.Error(
+				tx.Error,
+				"failed to begin transaction for update batch",
+				"batch_size",
+				len(batch),
+			)
+
+			return fmt.Errorf("failed to begin transaction for update batch: %w", tx.Error)
 		}
 
 		caseStmt := "CASE user_uid "
-		values := make([]interface{}, 0, len(batch)*2)
+		values := make([]any, 0, len(batch)*2)
+
 		batchUserUIDs := make([]uuid.UUID, 0, len(batch))
 		for _, record := range batch {
 			caseStmt += "WHEN ? THEN sent_bytes + ? "
+
 			values = append(values, record.UserUID, record.SentBytes)
 			batchUserUIDs = append(batchUserUIDs, record.UserUID)
 		}
+
 		caseStmt += "END"
 
 		if err := tx.Model(&types.UserTimeRangeTraffic{}).
 			Where("user_uid IN ?", batchUserUIDs).
-			Updates(map[string]interface{}{
+			Updates(map[string]any{
 				"sent_bytes": gorm.Expr(caseStmt, values...),
 				"updated_at": now,
 			}).Error; err != nil {
 			tx.Rollback()
 			c.Logger.Error(err, "failed to batch update user traffic", "batch_size", len(batch))
-			return fmt.Errorf("failed to batch update user traffic: %v", err)
+
+			return fmt.Errorf("failed to batch update user traffic: %w", err)
 		}
 
 		if err := tx.Commit().Error; err != nil {
-			c.Logger.Error(err, "failed to commit transaction for update batch", "batch_size", len(batch))
-			return fmt.Errorf("failed to commit transaction for update batch: %v", err)
+			c.Logger.Error(
+				err,
+				"failed to commit transaction for update batch",
+				"batch_size",
+				len(batch),
+			)
+
+			return fmt.Errorf("failed to commit transaction for update batch: %w", err)
 		}
+
 		c.Logger.Info("successfully updated batch", "batch_size", len(batch), "start_index", i)
 	}
+
 	return nil
 }
 
 func (c *UserTrafficController) ProcessTrafficWithTimeRange() {
 	c.Logger.Info("start user traffic controller")
+
 	startTime := time.Now().Add(-1 * time.Minute)
 	for range time.NewTicker(time.Minute).C {
 		c.Logger.Info("time to process user traffic", "startTime", startTime)
+
 		endTime := time.Now()
+
 		result, err := c.TrafficDB.GetNamespaceTraffic(context.Background(), startTime, endTime)
 		if err != nil {
 			c.Logger.Error(err, "failed to get namespace traffic")
+
 			endTime = startTime
 		} else if len(result) > 0 {
 			err = c.processUserTraffic(result)
@@ -224,6 +289,7 @@ func (c *UserTrafficController) ProcessTrafficWithTimeRange() {
 				c.Logger.Info("successfully process user traffic", "count", len(result), "start", startTime, "end", endTime)
 			}
 		}
+
 		startTime = endTime
 	}
 }
@@ -245,20 +311,27 @@ func (c *UserTrafficController) sendUserTrafficRequest(userUID uuid.UUID, operat
 			return fmt.Errorf("failed to generate token: %w", err)
 		}
 
-		url := fmt.Sprintf("https://account-api.%s/admin/v1alpha1/%s-user-traffic?userUID=%s", domain, operator, userUID.String())
+		url := fmt.Sprintf(
+			"https://account-api.%s/admin/v1alpha1/%s-user-traffic?userUID=%s",
+			domain,
+			operator,
+			userUID.String(),
+		)
 
 		var lastErr error
+
 		backoffTime := time.Second
 
 		maxRetries := 3
 		for attempt := 1; attempt <= maxRetries; attempt++ {
-			req, err := http.NewRequest("POST", url, nil)
+			req, err := http.NewRequest(http.MethodPost, url, nil)
 			if err != nil {
 				return fmt.Errorf("failed to create request: %w", err)
 			}
 
 			req.Header.Set("Authorization", "Bearer "+token)
 			req.Header.Set("Content-Type", "application/json")
+
 			client := http.Client{}
 
 			resp, err := client.Do(req)
@@ -271,6 +344,7 @@ func (c *UserTrafficController) sendUserTrafficRequest(userUID uuid.UUID, operat
 					lastErr = nil
 					break
 				}
+
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					lastErr = fmt.Errorf("unexpected status code: %d, failed to read response body: %w", resp.StatusCode, err)
@@ -281,15 +355,22 @@ func (c *UserTrafficController) sendUserTrafficRequest(userUID uuid.UUID, operat
 
 			// 进行重试
 			if attempt < maxRetries {
-				fmt.Printf("Attempt %d failed: %v. Retrying in %v...\n", attempt, lastErr, backoffTime)
+				fmt.Printf(
+					"Attempt %d failed: %v. Retrying in %v...\n",
+					attempt,
+					lastErr,
+					backoffTime,
+				)
 				time.Sleep(backoffTime)
 				backoffTime *= 2 // 指数增长退避时间
 			}
 		}
+
 		if lastErr != nil {
 			return lastErr
 		}
 	}
+
 	return nil
 }
 
@@ -358,16 +439,20 @@ func (m *UserTrafficMonitor) Start() {
 
 	// Start async suspend processor
 	m.wg.Add(1)
+
 	go m.asyncSuspendProcessor()
 
 	m.wg.Add(1)
+
 	go m.asyncResumeProcessor()
 
 	// Start periodic checker
 	m.wg.Add(1)
+
 	go m.periodicChecker()
 
 	m.wg.Add(1)
+
 	go m.ResumeUsers()
 }
 
@@ -413,9 +498,11 @@ func (m *UserTrafficMonitor) checkAndProcessUsers() int {
 			log.Printf("Failed to get processing users: %v", err)
 			break
 		}
+
 		if len(users) == 0 {
 			break
 		}
+
 		log.Printf("Processing users len: %d", len(users))
 		// Process this batch of users
 		processedBatch := m.processUsersBatch(users)
@@ -428,11 +515,15 @@ func (m *UserTrafficMonitor) checkAndProcessUsers() int {
 			break
 		}
 	}
+
 	return processed
 }
 
 // getProcessingUsers fetches users with traffic exceeding the limit
-func (m *UserTrafficMonitor) getProcessingUsers(offset, limit int, since time.Time) ([]ProcessingUser, error) {
+func (m *UserTrafficMonitor) getProcessingUsers(
+	offset, limit int,
+	since time.Time,
+) ([]ProcessingUser, error) {
 	var results []ProcessingUser
 
 	// Optimized query without subscription join
@@ -449,7 +540,9 @@ func (m *UserTrafficMonitor) getProcessingUsers(offset, limit int, since time.Ti
 	LIMIT ? OFFSET ?
 `
 
-	err := m.db.Raw(query, types.UserTimeRangeTrafficStatusProcessing, since, FreeTrafficLimit, limit, offset).Scan(&results).Error
+	err := m.db.Raw(query, types.UserTimeRangeTrafficStatusProcessing, since, FreeTrafficLimit, limit, offset).
+		Scan(&results).
+		Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query processing users: %w", err)
 	}
@@ -468,7 +561,8 @@ func (m *UserTrafficMonitor) processUsersBatch(users []ProcessingUser) int {
 		}
 
 		// Check if user is on a Free plan using SubscriptionCache
-		if entry, exists := m.subscriptionCache.GetEntry(user.UserUID); !exists || entry.PlanName != "Free" {
+		if entry, exists := m.subscriptionCache.GetEntry(user.UserUID); !exists ||
+			entry.PlanName != "Free" {
 			m.processingUsers.Delete(user.UserUID)
 			continue
 		}
@@ -490,6 +584,7 @@ func (m *UserTrafficMonitor) processUsersBatch(users []ProcessingUser) int {
 // asyncSuspendProcessor handles suspend requests asynchronously
 func (m *UserTrafficMonitor) asyncSuspendProcessor() {
 	defer m.wg.Done()
+
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -498,13 +593,16 @@ func (m *UserTrafficMonitor) asyncSuspendProcessor() {
 			if !ok {
 				return
 			}
+
 			<-m.workerPool
 
 			go func(uid uuid.UUID) {
 				defer func() {
 					m.workerPool <- struct{}{}
+
 					m.processingUsers.Delete(uid)
 				}()
+
 				m.handleUserSuspension(uid)
 			}(userUID)
 		}
@@ -539,6 +637,7 @@ func (m *UserTrafficMonitor) updateUserTrafficStatusUsedUp(userUID uuid.UUID) er
 	if result.Error != nil {
 		return fmt.Errorf("failed to update status: %w", result.Error)
 	}
+
 	return nil
 }
 
@@ -552,14 +651,17 @@ func (m *UserTrafficMonitor) updateUserTrafficStatusClean(userUID uuid.UUID) err
 	if result.Error != nil {
 		return fmt.Errorf("failed to update status: %w", result.Error)
 	}
+
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("no records found to update")
+		return errors.New("no records found to update")
 	}
+
 	return nil
 }
 
 func (m *UserTrafficMonitor) ResumeUsers() {
 	defer m.wg.Done()
+
 	log.Println("Starting user traffic resume process...")
 
 	ticker := time.NewTicker(CheckInterval)
@@ -594,6 +696,7 @@ func (m *UserTrafficMonitor) processResumeUsers() int {
 			log.Printf("Failed to get used_up users: %v", err)
 			break
 		}
+
 		if len(users) == 0 {
 			break
 		}
@@ -616,18 +719,22 @@ func (m *UserTrafficMonitor) processResumeUsers() int {
 // getEligibleUsersFromCache retrieves users with non-Free plans and Normal status
 func (m *UserTrafficMonitor) getEligibleUsersFromCache() map[uuid.UUID]struct{} {
 	eligibleUsers := make(map[uuid.UUID]struct{})
+
 	entries := m.subscriptionCache.GetAllEntries()
 	for _, entry := range entries {
-		if entry.PlanName != types.FreeSubscriptionPlanName && entry.Status == types.SubscriptionStatusNormal {
+		if entry.PlanName != types.FreeSubscriptionPlanName &&
+			entry.Status == types.SubscriptionStatusNormal {
 			eligibleUsers[entry.UserUID] = struct{}{}
 		}
 	}
+
 	return eligibleUsers
 }
 
 // getUsedUpUsers fetches users with used_up status
 func (m *UserTrafficMonitor) getUsedUpUsers(offset, limit int) ([]ProcessingUser, error) {
 	var results []ProcessingUser
+
 	query := `
 		SELECT 
 			user_uid,
@@ -638,15 +745,22 @@ func (m *UserTrafficMonitor) getUsedUpUsers(offset, limit int) ([]ProcessingUser
 		ORDER BY updated_at DESC
 		LIMIT ? OFFSET ?
 	`
-	err := m.db.Raw(query, types.UserTimeRangeTrafficStatusUsedUp, limit, offset).Scan(&results).Error
+
+	err := m.db.Raw(query, types.UserTimeRangeTrafficStatusUsedUp, limit, offset).
+		Scan(&results).
+		Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query used_up users: %w", err)
 	}
+
 	return results, nil
 }
 
 // processResumeBatch processes a batch of users for resumption
-func (m *UserTrafficMonitor) processResumeBatch(users []ProcessingUser, eligibleUsers map[uuid.UUID]struct{}) int {
+func (m *UserTrafficMonitor) processResumeBatch(
+	users []ProcessingUser,
+	eligibleUsers map[uuid.UUID]struct{},
+) int {
 	processed := 0
 
 	for _, user := range users {
@@ -686,6 +800,7 @@ func (m *UserTrafficMonitor) processNextCleanTimeUsers() int {
 			UserUID       uuid.UUID
 			NextCleanTime time.Time
 		}
+
 		query := `
 			SELECT 
 				user_uid,
@@ -695,11 +810,13 @@ func (m *UserTrafficMonitor) processNextCleanTimeUsers() int {
 			ORDER BY next_clean_time DESC
 			LIMIT ? OFFSET ?
 		`
+
 		err := m.db.Raw(query, threshold, batchSize, offset).Scan(&users).Error
 		if err != nil {
 			log.Printf("Failed to query NextCleanTime users: %v", err)
 			break
 		}
+
 		if len(users) == 0 {
 			break
 		}
@@ -730,12 +847,14 @@ func (m *UserTrafficMonitor) processNextCleanTimeUsers() int {
 // StartResumeProcessor starts the async resume processor
 func (m *UserTrafficMonitor) StartResumeProcessor() {
 	m.wg.Add(1)
+
 	go m.asyncResumeProcessor()
 }
 
 // asyncResumeProcessor handles resume requests asynchronously
 func (m *UserTrafficMonitor) asyncResumeProcessor() {
 	defer m.wg.Done()
+
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -744,13 +863,16 @@ func (m *UserTrafficMonitor) asyncResumeProcessor() {
 			if !ok {
 				return
 			}
+
 			<-m.workerPool
 
 			go func(uid uuid.UUID) {
 				defer func() {
 					m.workerPool <- struct{}{}
+
 					m.resumingUsers.Delete(uid)
 				}()
+
 				m.handleUserResumption(uid)
 			}(userUID)
 		}

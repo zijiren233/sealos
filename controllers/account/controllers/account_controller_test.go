@@ -22,19 +22,20 @@ import (
 	"os"
 	"testing"
 
-	ctrl "sigs.k8s.io/controller-runtime"
-
 	"github.com/labring/sealos/controllers/pkg/database"
 	"github.com/labring/sealos/controllers/pkg/database/cockroach"
 	"github.com/labring/sealos/controllers/pkg/database/mongo"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 func TestAccountReconciler_BillingCVM(t *testing.T) {
 	dbCtx := context.Background()
+
 	cvmDBClient, err := mongo.NewMongoInterface(dbCtx, os.Getenv(database.CVMMongoURI))
 	if err != nil {
 		t.Fatalf("unable to connect to mongo: %v", err)
 	}
+
 	defer func() {
 		if cvmDBClient != nil {
 			err := cvmDBClient.Disconnect(dbCtx)
@@ -43,20 +44,27 @@ func TestAccountReconciler_BillingCVM(t *testing.T) {
 			}
 		}
 	}()
-	v2Account, err := cockroach.NewCockRoach(os.Getenv(database.GlobalCockroachURI), os.Getenv(database.LocalCockroachURI))
+
+	v2Account, err := cockroach.NewCockRoach(
+		os.Getenv(database.GlobalCockroachURI),
+		os.Getenv(database.LocalCockroachURI),
+	)
 	if err != nil {
 		t.Fatalf("unable to connect to cockroach: %v", err)
 	}
+
 	defer func() {
 		err := v2Account.Close()
 		if err != nil {
 			t.Errorf("unable to disconnect from cockroach: %v", err)
 		}
 	}()
+
 	DBClient, err := mongo.NewMongoInterface(dbCtx, os.Getenv(database.MongoURI))
 	if err != nil {
 		t.Fatalf("unable to connect to mongo: %v", err)
 	}
+
 	defer func() {
 		err := DBClient.Disconnect(dbCtx)
 		if err != nil {
@@ -77,22 +85,25 @@ func TestAccountReconciler_BillingCVM(t *testing.T) {
 
 func TestAccountV2_GetAccountConfig(t *testing.T) {
 	os.Setenv("LOCAL_REGION", "")
+
 	v2Account, err := cockroach.NewCockRoach("", "")
 	if err != nil {
 		t.Fatalf("unable to connect to cockroach: %v", err)
 	}
+
 	defer func() {
 		err := v2Account.Close()
 		if err != nil {
 			t.Errorf("unable to disconnect from cockroach: %v", err)
 		}
 	}()
+
 	err = v2Account.InitTables()
 	if err != nil {
 		t.Fatalf("unable to init tables: %v", err)
 	}
 
-	//if err = v2Account.InsertAccountConfig(&types.AccountConfig{
+	// if err = v2Account.InsertAccountConfig(&types.AccountConfig{
 	//	TaskProcessRegion: "192.160.0.55.nip.io",
 	//	FirstRechargeDiscountSteps: map[int64]float64{
 	//		8: 100, 32: 100, 128: 100, 256: 100, 512: 100, 1024: 100,
@@ -101,7 +112,7 @@ func TestAccountV2_GetAccountConfig(t *testing.T) {
 	//		//128,256,512,1024,2048,4096; 10,15,20,25,30,35
 	//		128: 10, 256: 15, 512: 20, 1024: 25, 2048: 30, 4096: 35,
 	//	},
-	//}); err != nil {
+	// }); err != nil {
 	//	t.Fatalf("unable to insert account config: %v", err)
 	//}
 
@@ -114,5 +125,6 @@ func TestAccountV2_GetAccountConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to marshal account config: %v", err)
 	}
+
 	t.Logf("success get account config:\n%s", string(data))
 }

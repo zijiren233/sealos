@@ -30,6 +30,7 @@ func CreateSMSClient(ak, sk, endpoint string) (*dysmsapi20170525.Client, error) 
 		Endpoint:        tea.String(endpoint),
 	}
 	client, err := dysmsapi20170525.NewClient(config)
+
 	return client, err
 }
 
@@ -41,12 +42,15 @@ func CreateSMSClient(ak, sk, endpoint string) (*dysmsapi20170525.Client, error) 
 //	 }/*
 func SendSms(client *dysmsapi20170525.Client, req *dysmsapi20170525.SendSmsRequest) (err error) {
 	runtime := &util.RuntimeOptions{}
+
 	resp, err := client.SendSmsWithOptions(req, runtime)
 	if err != nil {
 		return err
 	}
+
 	if *resp.Body.Code != "OK" {
 		return fmt.Errorf("send sms err code %s: %s", *resp.Body.Code, *resp.Body.Message)
 	}
+
 	return err
 }
