@@ -29,6 +29,7 @@ func (rs *DatabaseServer) Serve(c *server.Config) {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Printf("Serve on %s\n", c.Server.ListenAddress)
 
 	if err := hs.Serve(listener); err != nil {
