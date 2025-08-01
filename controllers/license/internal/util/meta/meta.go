@@ -33,9 +33,10 @@ func New(license *licensev1.License) (*Meta, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &Meta{
 		Token:          license.Spec.Token,
-		ActivationTime: license.Status.ActivationTime.Format("2006-01-02 15:04:05"),
+		ActivationTime: license.Status.ActivationTime.Format(time.DateTime),
 		Claims:         *claims,
 	}, nil
 }

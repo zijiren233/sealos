@@ -19,7 +19,6 @@ import (
 
 	"github.com/labring/sealos/controllers/license/internal/util/meta"
 	"github.com/labring/sealos/controllers/pkg/utils/logger"
-
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	mongoOptions "go.mongodb.org/mongo-driver/mongo/options"
@@ -44,14 +43,18 @@ func New(ctx context.Context, uri string) (*DataBase, error) {
 	if err != nil {
 		return &DataBase{}, err
 	}
+
 	if err := client.Ping(ctx, nil); err != nil {
 		return nil, err
 	}
+
 	return &DataBase{
-		URI:                 uri,
-		Client:              client,
-		licenseCollection:   client.Database(DefaultLicenseDataBase).Collection(DefaultLicenseCollection),
-		clusterIDCollection: client.Database(DefaultLicenseDataBase).Collection(DefaultClusterIDCollection),
+		URI:    uri,
+		Client: client,
+		licenseCollection: client.Database(DefaultLicenseDataBase).
+			Collection(DefaultLicenseCollection),
+		clusterIDCollection: client.Database(DefaultLicenseDataBase).
+			Collection(DefaultClusterIDCollection),
 	}, nil
 }
 
@@ -64,6 +67,7 @@ func (db *DataBase) GetLicenseMeta(ctx context.Context, token string) (*meta.Met
 	filter := bson.M{"token": token}
 	lic := &meta.Meta{}
 	err := db.licenseCollection.FindOne(ctx, filter).Decode(lic)
+
 	return lic, err
 }
 
@@ -71,19 +75,23 @@ func (db *DataBase) GetClusterID(ctx context.Context) (string, error) {
 	var result struct {
 		ClusterID string `bson:"cluster-id"`
 	}
+
 	err := db.licenseCollection.FindOne(ctx, bson.M{}).Decode(&result)
 	if err != nil {
 		return "", err
 	}
+
 	return result.ClusterID, nil
 }
 
 func (db *DataBase) StoreClusterID(ctx context.Context, clusterID string) error {
 	document := bson.M{"cluster-id": clusterID}
+
 	_, err := db.licenseCollection.InsertOne(ctx, document)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

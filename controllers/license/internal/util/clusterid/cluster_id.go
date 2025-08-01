@@ -26,17 +26,21 @@ import (
 func GetClusterID(config *rest.Config) (string, error) {
 	ns := &corev1.Namespace{}
 	ctx := context.Background()
+
 	c, err := client.New(config, client.Options{})
 	if err != nil {
 		return "", err
 	}
+
 	err = c.Get(ctx, client.ObjectKey{Name: "kube-system"}, ns)
 	if err != nil {
 		return "", err
 	}
+
 	res := string(ns.UID)
 	if res == "" || len(res) < 8 {
-		return "", fmt.Errorf("failed to get cluster id")
+		return "", errors.New("failed to get cluster id")
 	}
+
 	return res[0:8], nil
 }

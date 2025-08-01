@@ -27,9 +27,11 @@ func (i *Info) GetClusterID() string {
 
 func (i *Info) CompareWithClaimData(data *claims.ClaimData) bool {
 	cdata := &claims.ClusterClaimData{}
+
 	err := data.SwitchToClusterData(cdata)
 	if err != nil {
 		return false
 	}
-	return i.ClusterClaimData.Compare(cdata)
+
+	return i.Compare(cdata)
 }

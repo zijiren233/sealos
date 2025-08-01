@@ -23,6 +23,7 @@ func TestClaimData_SwitchToAccountData(t *testing.T) {
 	type args struct {
 		data *AccountClaimData
 	}
+
 	tests := []struct {
 		name    string
 		c       ClaimData
@@ -45,6 +46,7 @@ func TestClaimData_SwitchToAccountData(t *testing.T) {
 			if err := tt.c.SwitchToAccountData(tt.args.data); (err != nil) != tt.wantErr {
 				t.Errorf("SwitchToAccountData() error = %v, wantErr %v", err, tt.wantErr)
 			}
+
 			fmt.Printf("%v", tt.args.data)
 		})
 	}
@@ -54,6 +56,7 @@ func TestClaimData_SwitchToClusterData(t *testing.T) {
 	type args struct {
 		data *ClusterClaimData
 	}
+
 	tests := []struct {
 		name    string
 		c       ClaimData

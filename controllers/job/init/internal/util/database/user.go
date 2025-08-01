@@ -15,6 +15,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"

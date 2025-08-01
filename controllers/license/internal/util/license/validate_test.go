@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/golang-jwt/jwt/v4"
-
 	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	utilclaims "github.com/labring/sealos/controllers/license/internal/util/claims"
 	"github.com/labring/sealos/controllers/license/internal/util/cluster"
@@ -29,6 +28,7 @@ func TestIsLicenseValid(t *testing.T) {
 		license *licensev1.License
 		data    *cluster.Info
 	}
+
 	tests := []struct {
 		name    string
 		args    args
@@ -62,6 +62,7 @@ func TestIsLicenseValid(t *testing.T) {
 				t.Errorf("IsLicenseValid() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+
 			t.Log(got)
 		})
 	}
@@ -71,6 +72,7 @@ func TestParseLicenseToken(t *testing.T) {
 	type args struct {
 		license *licensev1.License
 	}
+
 	tests := []struct {
 		name    string
 		args    args
@@ -93,6 +95,7 @@ func TestParseLicenseToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseLicenseToken(tt.args.license)
 			t.Log(got.Claims)
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseLicenseToken() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -105,6 +108,7 @@ func TestGetClaims(t *testing.T) {
 	type args struct {
 		license *licensev1.License
 	}
+
 	tests := []struct {
 		name    string
 		args    args
@@ -129,6 +133,7 @@ func TestGetClaims(t *testing.T) {
 				t.Errorf("GetClaims() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+
 			t.Log(got)
 		})
 	}
