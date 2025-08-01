@@ -16,15 +16,13 @@ package cluster
 
 import (
 	"context"
-	"fmt"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"errors"
 
 	"github.com/labring/sealos/controllers/job/heartbeat/api/v1alpha"
 	"github.com/labring/sealos/controllers/job/heartbeat/internal/util"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func GetClusterResources() (*v1alpha.ClusterResource, error) {
@@ -32,6 +30,7 @@ func GetClusterResources() (*v1alpha.ClusterResource, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	nodeList := &corev1.NodeList{}
 	if err := c.List(context.Background(), nodeList); err != nil {
 		return nil, err
@@ -43,6 +42,7 @@ func GetClusterResources() (*v1alpha.ClusterResource, error) {
 	for _, node := range nodeList.Items {
 		cpu := node.Status.Capacity["cpu"]
 		mem := node.Status.Capacity["memory"]
+
 		totalCPU.Add(cpu)
 		totalMem.Add(mem)
 	}
@@ -59,13 +59,16 @@ func GetClusterID() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	kubeSystemNamespace := &corev1.Namespace{}
 	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "kube-system", Name: "kube-system"}, kubeSystemNamespace); err != nil {
 		return "", err
 	}
+
 	res := string(kubeSystemNamespace.UID)
 	if len(res) < 8 {
-		return "", fmt.Errorf("cluster id is invalid")
+		return "", errors.New("cluster id is invalid")
 	}
+
 	return res[0:8], nil
 }

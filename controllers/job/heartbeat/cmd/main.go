@@ -16,7 +16,6 @@ package main
 
 import (
 	"github.com/go-resty/resty/v2"
-
 	"github.com/labring/sealos/controllers/job/heartbeat/api/v1alpha"
 	"github.com/labring/sealos/controllers/job/heartbeat/internal/cluster"
 	"github.com/labring/sealos/controllers/pkg/utils/logger"
@@ -28,6 +27,7 @@ func main() {
 		logger.Error(err.Error())
 		return
 	}
+
 	logger.Info("cluster resource: %+v", resource)
 
 	clusterID, err := cluster.GetClusterID()
@@ -35,9 +35,11 @@ func main() {
 		logger.Error(err.Error())
 		return
 	}
+
 	logger.Info("cluster id: %s", clusterID)
 
 	client := resty.New()
+
 	_, err = client.R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(v1alpha.Request{
@@ -49,5 +51,6 @@ func main() {
 		logger.Error(err.Error())
 		return
 	}
+
 	logger.Info("heartbeat success")
 }
