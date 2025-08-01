@@ -44,7 +44,6 @@ linters:
     - misspell
     - musttag
     - nakedret
-    - noctx
     - nolintlint
     - nosprintfhostport
     - perfsprint
