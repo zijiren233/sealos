@@ -25,5 +25,6 @@ func SetPodSecurity(labels map[string]string) map[string]string {
 	labels["pod-security.kubernetes.io/audit-version"] = PodSecurityVersion
 	labels["pod-security.kubernetes.io/warn"] = "restricted"
 	labels["pod-security.kubernetes.io/warn-version"] = PodSecurityVersion
+
 	return labels
 }

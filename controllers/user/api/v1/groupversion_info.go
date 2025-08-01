@@ -58,6 +58,7 @@ func validateAnnotationKeyNotEmpty(meta metav1.ObjectMeta, key string) error {
 	if meta.Annotations[key] == "" {
 		return fmt.Errorf("annotation %s not allow empty", key)
 	}
+
 	return nil
 }
 
@@ -65,8 +66,10 @@ func initAnnotationAndLabels(meta metav1.ObjectMeta) metav1.ObjectMeta {
 	if meta.Annotations == nil {
 		meta.Annotations = make(map[string]string, 0)
 	}
+
 	if meta.Labels == nil {
 		meta.Labels = make(map[string]string, 0)
 	}
+
 	return meta
 }

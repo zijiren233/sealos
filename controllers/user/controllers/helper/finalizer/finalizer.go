@@ -37,11 +37,14 @@ func (f *Finalizer) AddFinalizer(ctx context.Context, obj client.Object) (bool, 
 		// then lets add the finalizer and update the object. This is equivalent
 		// registering our finalizer.
 		notDelete = true
+
 		controllerutil.AddFinalizer(obj, f.finalizerName)
+
 		if err := f.updateFinalizers(ctx, client.ObjectKeyFromObject(obj), obj, obj.GetFinalizers()); err != nil {
 			return notDelete, err
 		}
 	}
+
 	return notDelete, nil
 }
 
@@ -56,10 +59,15 @@ func NewFinalizer(client client.Client, finalizerName string) *Finalizer {
 	}
 }
 
-func (f *Finalizer) RemoveFinalizer(ctx context.Context, obj client.Object, fun func(ctx context.Context, obj client.Object) error) (bool, error) {
+func (f *Finalizer) RemoveFinalizer(
+	ctx context.Context,
+	obj client.Object,
+	fun func(ctx context.Context, obj client.Object) error,
+) (bool, error) {
 	var deleteBool bool
 	if obj.GetDeletionTimestamp() != nil && !obj.GetDeletionTimestamp().IsZero() {
 		deleteBool = true
+
 		if controllerutil.ContainsFinalizer(obj, f.finalizerName) {
 			// our finalizer is present, so lets handle any external dependency
 			if err := fun(ctx, obj); err != nil {
@@ -67,31 +75,42 @@ func (f *Finalizer) RemoveFinalizer(ctx context.Context, obj client.Object, fun 
 			}
 
 			controllerutil.RemoveFinalizer(obj, f.finalizerName)
+
 			if err := f.updateFinalizers(ctx, client.ObjectKeyFromObject(obj), obj, obj.GetFinalizers()); err != nil {
 				return deleteBool, err
 			}
 		}
 	}
+
 	return deleteBool, nil
 }
 
-func (f *Finalizer) updateFinalizers(ctx context.Context, objectKey client.ObjectKey, obj client.Object, finalizers []string) error {
+func (f *Finalizer) updateFinalizers(
+	ctx context.Context,
+	objectKey client.ObjectKey,
+	obj client.Object,
+	finalizers []string,
+) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		gvk := obj.GetObjectKind().GroupVersionKind()
 		fetchObject := &unstructured.Unstructured{}
 		fetchObject.SetAPIVersion(gvk.GroupVersion().String())
 		fetchObject.SetKind(gvk.Kind)
+
 		err := f.client.Get(ctx, objectKey, fetchObject)
 		if err != nil {
 			// We log this error, but we continue and try to set the ownerRefs on the other resources.
 			return err
 		}
+
 		fetchObject.SetFinalizers(finalizers)
+
 		err = f.client.Update(ctx, fetchObject)
 		if err != nil {
 			// We log this error, but we continue and try to set the ownerRefs on the other resources.
 			return err
 		}
+
 		return nil
 	})
 }

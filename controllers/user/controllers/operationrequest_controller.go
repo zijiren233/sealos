@@ -22,24 +22,21 @@ import (
 	"sync"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
 	"github.com/go-logr/logr"
-
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
 	"github.com/labring/sealos/controllers/user/controllers/helper/ratelimiter"
-
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	controller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // OperationReqRequeueDuration is the time interval to reconcile a OperationRequest if no error occurs
@@ -61,20 +58,28 @@ type OperationReqReconciler struct {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *OperationReqReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.RateLimiterOptions, expTime time.Duration, retTime time.Duration) error {
+func (r *OperationReqReconciler) SetupWithManager(
+	mgr ctrl.Manager,
+	opts ratelimiter.RateLimiterOptions,
+	expTime, retTime time.Duration,
+) error {
 	const controllerName = "operationrequest_controller"
+
 	if r.Client == nil {
 		r.Client = mgr.GetClient()
 	}
+
 	r.Logger = ctrl.Log.WithName(controllerName)
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor(controllerName)
 	}
+
 	r.Scheme = mgr.GetScheme()
 	r.expirationTime = expTime
 	r.retentionTime = retTime
 	r.userLock = make(map[string]*sync.Mutex)
 	r.Logger.V(1).Info("init reconcile operationrequest controller")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&userv1.Operationrequest{}, builder.WithPredicates(namespaceOnlyPredicate(config.GetUserSystemNamespace()))).
 		WithOptions(controller.Options{
@@ -105,35 +110,48 @@ func namespaceOnlyPredicate(namespace string) predicate.Predicate {
 // +kubebuilder:rbac:groups=user.sealos.io,resources=operationrequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=user.sealos.io,resources=operationrequests/finalizers,verbs=update
 
-func (r *OperationReqReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *OperationReqReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	operationRequest := &userv1.Operationrequest{}
 	if err := r.Get(ctx, req.NamespacedName, operationRequest); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
 	return r.reconcile(ctx, operationRequest)
 }
 
-func (r *OperationReqReconciler) reconcile(ctx context.Context, request *userv1.Operationrequest) (ctrl.Result, error) {
+func (r *OperationReqReconciler) reconcile(
+	ctx context.Context,
+	request *userv1.Operationrequest,
+) (ctrl.Result, error) {
 	userLock, ok := r.userLock[request.Spec.User]
 	if !ok {
 		userLock = &sync.Mutex{}
 		r.userLock[request.Spec.User] = userLock
 	}
+
 	userLock.Lock()
 	defer userLock.Unlock()
+
 	r.Logger.V(1).Info("start reconcile controller operationRequest", getLog(request)...)
 	// count the time cost of handling the request
 	startTime := time.Now()
+
 	defer func() {
-		r.Logger.V(1).Info("complete request handling", getLog(request, "create time", request.CreationTimestamp, "handling cost time", time.Since(startTime))...)
+		r.Logger.V(1).
+			Info("complete request handling", getLog(request, "create time", request.CreationTimestamp, "handling cost time", time.Since(startTime))...)
 	}()
 
 	// delete OperationRequest first if its status is isCompleted and exist for retention time
 	if r.isRetained(request) {
 		r.Logger.V(1).Info("delete request", getLog(request)...)
+
 		if err := r.deleteRequest(ctx, request); err != nil {
 			return ctrl.Result{}, err
 		}
+
 		return ctrl.Result{}, nil
 	}
 	// return early if its status is isCompleted and didn't exist for retention time
@@ -144,9 +162,11 @@ func (r *OperationReqReconciler) reconcile(ctx context.Context, request *userv1.
 	// change OperationRequest status to failed if it is expired
 	if r.isExpired(request) {
 		r.Logger.V(1).Info("request is expired, update status to failed", getLog(request)...)
+
 		if err := r.updateRequestStatus(ctx, request, userv1.RequestFailed); err != nil {
 			return ctrl.Result{}, err
 		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -167,14 +187,28 @@ func (r *OperationReqReconciler) reconcile(ctx context.Context, request *userv1.
 
 	user := &userv1.User{}
 	if err := r.Get(ctx, client.ObjectKey{Name: config.GetUserNameByNamespace(request.Spec.Namespace)}, user); err != nil {
-		r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to get user", "Failed to get user %s", request.Spec.User)
+		r.Recorder.Eventf(
+			request,
+			v1.EventTypeWarning,
+			"Failed to get user",
+			"Failed to get user %s",
+			request.Spec.User,
+		)
 		return ctrl.Result{}, err
 	}
+
 	bindUser := &userv1.User{}
 	if err := r.Get(ctx, client.ObjectKey{Name: request.Spec.User}, bindUser); err != nil {
-		r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to get bind user", "Failed to get bind user %s", request.Spec.User)
+		r.Recorder.Eventf(
+			request,
+			v1.EventTypeWarning,
+			"Failed to get bind user",
+			"Failed to get bind user %s",
+			request.Spec.User,
+		)
 		return ctrl.Result{}, err
 	}
+
 	setUpOwnerReferenceFc := func() error {
 		return ctrl.SetControllerReference(bindUser, rolebinding, r.Scheme)
 	}
@@ -182,44 +216,119 @@ func (r *OperationReqReconciler) reconcile(ctx context.Context, request *userv1.
 	// handle OperationRequest, create or delete rolebinding
 	switch request.Spec.Action {
 	case userv1.Grant:
-		r.Recorder.Eventf(request, v1.EventTypeNormal, "Grant", "Grant role %s to user %s", request.Spec.Role, request.Spec.User)
+		r.Recorder.Eventf(
+			request,
+			v1.EventTypeNormal,
+			"Grant",
+			"Grant role %s to user %s",
+			request.Spec.Role,
+			request.Spec.User,
+		)
+
 		if _, err := ctrl.CreateOrUpdate(ctx, r.Client, rolebinding, setUpOwnerReferenceFc); err != nil {
-			r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to create/update rolebinding", "Failed to create rolebinding %s/%s", rolebinding.Namespace, rolebinding.Name)
+			r.Recorder.Eventf(
+				request,
+				v1.EventTypeWarning,
+				"Failed to create/update rolebinding",
+				"Failed to create rolebinding %s/%s",
+				rolebinding.Namespace,
+				rolebinding.Name,
+			)
 			return ctrl.Result{}, err
 		}
+
 		if request.Spec.Role == userv1.OwnerRoleType {
 			// update user annotation
 			user.Annotations[userv1.UserAnnotationOwnerKey] = request.Spec.User
 			if err := r.Update(ctx, user); err != nil {
-				r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to update user", "Failed to update user %s", request.Spec.User)
+				r.Recorder.Eventf(
+					request,
+					v1.EventTypeWarning,
+					"Failed to update user",
+					"Failed to update user %s",
+					request.Spec.User,
+				)
 				return ctrl.Result{}, err
 			}
 		}
 	case userv1.Deprive:
-		r.Recorder.Eventf(request, v1.EventTypeNormal, "Deprive", "Deprive role %s from user %s", request.Spec.Role, request.Spec.User)
+		r.Recorder.Eventf(
+			request,
+			v1.EventTypeNormal,
+			"Deprive",
+			"Deprive role %s from user %s",
+			request.Spec.Role,
+			request.Spec.User,
+		)
+
 		if err := r.Delete(ctx, rolebinding); client.IgnoreNotFound(err) != nil {
-			r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to delete rolebinding", "Failed to delete rolebinding %s/%s", rolebinding.Namespace, rolebinding.Name)
+			r.Recorder.Eventf(
+				request,
+				v1.EventTypeWarning,
+				"Failed to delete rolebinding",
+				"Failed to delete rolebinding %s/%s",
+				rolebinding.Namespace,
+				rolebinding.Name,
+			)
 			return ctrl.Result{}, err
 		}
 	case userv1.Update:
-		r.Recorder.Eventf(request, v1.EventTypeNormal, "Update", "Update role %s to user %s", request.Spec.Role, request.Spec.User)
+		r.Recorder.Eventf(
+			request,
+			v1.EventTypeNormal,
+			"Update",
+			"Update role %s to user %s",
+			request.Spec.Role,
+			request.Spec.User,
+		)
+
 		if err := r.Delete(ctx, rolebinding); client.IgnoreNotFound(err) != nil {
-			r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to delete rolebinding", "Failed to delete rolebinding %s/%s", rolebinding.Namespace, rolebinding.Name)
+			r.Recorder.Eventf(
+				request,
+				v1.EventTypeWarning,
+				"Failed to delete rolebinding",
+				"Failed to delete rolebinding %s/%s",
+				rolebinding.Namespace,
+				rolebinding.Name,
+			)
 			return ctrl.Result{}, err
 		}
+
 		if err := r.Create(ctx, rolebinding); err != nil {
-			r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to create rolebinding", "Failed to create rolebinding %s/%s", rolebinding.Namespace, rolebinding.Name)
+			r.Recorder.Eventf(
+				request,
+				v1.EventTypeWarning,
+				"Failed to create rolebinding",
+				"Failed to create rolebinding %s/%s",
+				rolebinding.Namespace,
+				rolebinding.Name,
+			)
 			return ctrl.Result{}, err
 		}
+
 		if err = setUpOwnerReferenceFc(); err != nil {
-			r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to set owner reference", "Failed to set owner reference for rolebinding %s/%s", rolebinding.Namespace, rolebinding.Name)
+			r.Recorder.Eventf(
+				request,
+				v1.EventTypeWarning,
+				"Failed to set owner reference",
+				"Failed to set owner reference for rolebinding %s/%s",
+				rolebinding.Namespace,
+				rolebinding.Name,
+			)
 			return ctrl.Result{}, err
 		}
+
 		if request.Spec.Role == userv1.OwnerRoleType {
 			// update user annotation
 			user.Annotations[userv1.UserAnnotationOwnerKey] = request.Spec.User
 			if err := r.Update(ctx, user); err != nil {
-				r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to update user", "Failed to update user %s", request.Spec.User)
+				r.Recorder.Eventf(
+					request,
+					v1.EventTypeWarning,
+					"Failed to update user",
+					"Failed to update user %s",
+					request.Spec.User,
+				)
 				return ctrl.Result{}, err
 			}
 		}
@@ -233,15 +342,25 @@ func (r *OperationReqReconciler) reconcile(ctx context.Context, request *userv1.
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Eventf(request, v1.EventTypeNormal, "Completed", "Completed operation request %s/%s", request.Spec.Namespace, request.Name)
+	r.Recorder.Eventf(
+		request,
+		v1.EventTypeNormal,
+		"Completed",
+		"Completed operation request %s/%s",
+		request.Spec.Namespace,
+		request.Name,
+	)
+
 	return ctrl.Result{RequeueAfter: OperationReqRequeueDuration}, nil
 }
 
 // isRetained returns true if the request is isCompleted and exist for retention time
 func (r *OperationReqReconciler) isRetained(request *userv1.Operationrequest) bool {
-	if request.Status.Phase == userv1.RequestCompleted && request.CreationTimestamp.Add(r.retentionTime).Before(time.Now()) {
+	if request.Status.Phase == userv1.RequestCompleted &&
+		request.CreationTimestamp.Add(r.retentionTime).Before(time.Now()) {
 		return true
 	}
+
 	return false
 }
 
@@ -252,31 +371,66 @@ func (r *OperationReqReconciler) isCompleted(request *userv1.Operationrequest) b
 
 // isExpired returns true if the request is expired
 func (r *OperationReqReconciler) isExpired(request *userv1.Operationrequest) bool {
-	if request.Status.Phase != userv1.RequestCompleted && request.CreationTimestamp.Add(r.expirationTime).Before(time.Now()) {
+	if request.Status.Phase != userv1.RequestCompleted &&
+		request.CreationTimestamp.Add(r.expirationTime).Before(time.Now()) {
 		return true
 	}
+
 	return false
 }
 
-func (r *OperationReqReconciler) deleteRequest(ctx context.Context, request *userv1.Operationrequest) error {
+func (r *OperationReqReconciler) deleteRequest(
+	ctx context.Context,
+	request *userv1.Operationrequest,
+) error {
 	r.Logger.V(1).Info("deleting OperationRequest", "request", request)
+
 	if err := r.Delete(ctx, request); client.IgnoreNotFound(err) != nil {
-		r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to delete OperationRequest", "Failed to delete OperationRequest %s/%s", request.Spec.Namespace, request.Name)
+		r.Recorder.Eventf(
+			request,
+			v1.EventTypeWarning,
+			"Failed to delete OperationRequest",
+			"Failed to delete OperationRequest %s/%s",
+			request.Spec.Namespace,
+			request.Name,
+		)
 		r.Logger.Error(err, "Failed to delete OperationRequest", getLog(request)...)
-		return fmt.Errorf("failed to delete OperationRequest %s/%s: %w", request.Spec.Namespace, request.Name, err)
+
+		return fmt.Errorf(
+			"failed to delete OperationRequest %s/%s: %w",
+			request.Spec.Namespace,
+			request.Name,
+			err,
+		)
 	}
+
 	r.Logger.V(1).Info("delete OperationRequest success", getLog(request)...)
+
 	return nil
 }
 
-func (r *OperationReqReconciler) updateRequestStatus(ctx context.Context, request *userv1.Operationrequest, phase userv1.RequestPhase) error {
+func (r *OperationReqReconciler) updateRequestStatus(
+	ctx context.Context,
+	request *userv1.Operationrequest,
+	phase userv1.RequestPhase,
+) error {
 	request.Status.Phase = phase
 	if err := r.Status().Update(ctx, request); err != nil {
-		r.Recorder.Eventf(request, v1.EventTypeWarning, "Failed to update OperationRequest status", "Failed to update OperationRequest status %s/%s", request.Spec.Namespace, request.Name)
+		r.Recorder.Eventf(
+			request,
+			v1.EventTypeWarning,
+			"Failed to update OperationRequest status",
+			"Failed to update OperationRequest status %s/%s",
+			request.Spec.Namespace,
+			request.Name,
+		)
 		r.Logger.V(1).Info("update OperationRequest status failed", getLog(request)...)
+
 		return err
 	}
+
 	r.Logger.V(1).Info("update OperationRequest status success", getLog(request)...)
+
 	return nil
 }
 
@@ -307,8 +461,8 @@ func conventRequestToRolebinding(request *userv1.Operationrequest) *rbacv1.RoleB
 	}
 }
 
-func getLog(request *userv1.Operationrequest, kv ...interface{}) []interface{} {
-	return append([]interface{}{
+func getLog(request *userv1.Operationrequest, kv ...any) []any {
+	return append([]any{
 		"request.name", request.Name,
 		"request.Spec.Namespace", request.Spec.Namespace,
 		"request.user", request.Spec.User,

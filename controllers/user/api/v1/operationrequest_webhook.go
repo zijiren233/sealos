@@ -33,6 +33,7 @@ var operationrequestlog = logf.Log.WithName("operationrequest-resource")
 func (r *Operationrequest) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	m := &ReqMutator{Client: mgr.GetClient()}
 	v := &ReqValidator{Client: mgr.GetClient()}
+
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
 		WithDefaulter(m).
@@ -56,6 +57,7 @@ func (r ReqMutator) Default(_ context.Context, obj runtime.Object) error {
 	operationrequestlog.Info("mutate", "name", req.Name)
 	req.ObjectMeta = initAnnotationAndLabels(req.ObjectMeta)
 	req.Labels[UserLabelOwnerKey] = req.Spec.User
+
 	return nil
 }
 
@@ -66,17 +68,30 @@ type ReqValidator struct {
 	client.Client
 }
 
-func (r ReqValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (r ReqValidator) ValidateCreate(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	req, ok := obj.(*Operationrequest)
 	if !ok {
-		return admission.Warnings{"obj convert Operationrequest is error"}, errors.New("obj convert Operationrequest is error")
+		return admission.Warnings{
+				"obj convert Operationrequest is error",
+			}, errors.New(
+				"obj convert Operationrequest is error",
+			)
 	}
 
 	// todo check request, _ := admission.RequestFromContext(ctx), request.UserInfo.Username if legal
 
 	// list all requests in the same namespace with a same owner
 	var reqList OperationrequestList
-	err := r.List(ctx, &reqList, client.InNamespace(req.Namespace), client.MatchingLabels{UserLabelOwnerKey: req.Spec.User})
+
+	err := r.List(
+		ctx,
+		&reqList,
+		client.InNamespace(req.Namespace),
+		client.MatchingLabels{UserLabelOwnerKey: req.Spec.User},
+	)
 	if client.IgnoreNotFound(err) != nil {
 		operationrequestlog.Error(err, "list operationrequest error")
 		return admission.Warnings{"list operationrequest error"}, err
@@ -84,29 +99,61 @@ func (r ReqValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (a
 
 	for _, item := range reqList.Items {
 		if item.Status.Phase != RequestCompleted {
-			operationrequestlog.Info("there is a request not completed, can not create new request", "name", item.Name, "phase", item.Status.Phase)
-			return admission.Warnings{"there is a request not completed, can not create new request"}, errors.New("there is a request not completed, can not create new request")
+			operationrequestlog.Info(
+				"there is a request not completed, can not create new request",
+				"name",
+				item.Name,
+				"phase",
+				item.Status.Phase,
+			)
+			return admission.Warnings{
+					"there is a request not completed, can not create new request",
+				}, errors.New(
+					"there is a request not completed, can not create new request",
+				)
 		}
 	}
+
 	return admission.Warnings{}, nil
 }
 
-func (r ReqValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (r ReqValidator) ValidateUpdate(
+	_ context.Context,
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
 	// todo check request, _ := admission.RequestFromContext(ctx), request.UserInfo.Username if legal
 	oldReq, ok := oldObj.(*Operationrequest)
 	if !ok {
-		return admission.Warnings{"obj convert Operationrequest error"}, errors.New("obj convert Operationrequest error")
+		return admission.Warnings{
+				"obj convert Operationrequest error",
+			}, errors.New(
+				"obj convert Operationrequest error",
+			)
 	}
+
 	newReq, ok := newObj.(*Operationrequest)
 	if !ok {
-		return admission.Warnings{"obj convert Operationrequest error"}, errors.New("obj convert Operationrequest error")
+		return admission.Warnings{
+				"obj convert Operationrequest error",
+			}, errors.New(
+				"obj convert Operationrequest error",
+			)
 	}
+
 	if oldReq.Spec != newReq.Spec {
-		return admission.Warnings{"operation request spec do not support update"}, errors.New("operation request spec do not support update")
+		return admission.Warnings{
+				"operation request spec do not support update",
+			}, errors.New(
+				"operation request spec do not support update",
+			)
 	}
+
 	return admission.Warnings{}, nil
 }
 
-func (r ReqValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (r ReqValidator) ValidateDelete(
+	_ context.Context,
+	_ runtime.Object,
+) (admission.Warnings, error) {
 	return admission.Warnings{}, nil
 }

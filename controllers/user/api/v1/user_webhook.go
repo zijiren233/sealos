@@ -50,17 +50,22 @@ func (r *User) Default(ctx context.Context, obj runtime.Object) error {
 	if !ok {
 		return errors.New("obj convert User is error")
 	}
+
 	userlog.Info("default", "name", user.Name)
+
 	user.ObjectMeta = initAnnotationAndLabels(user.ObjectMeta)
 	if user.Spec.CSRExpirationSeconds == 0 {
 		user.Spec.CSRExpirationSeconds = 7200
 	}
+
 	if user.Annotations[UserAnnotationDisplayKey] == "" {
 		user.Annotations[UserAnnotationDisplayKey] = user.Name
 	}
+
 	if user.Annotations[UserAnnotationOwnerKey] == "" {
 		user.Annotations[UserAnnotationOwnerKey] = user.Name
 	}
+
 	return nil
 }
 
@@ -75,24 +80,39 @@ func (r *User) ValidateCreate(ctx context.Context, obj runtime.Object) (admissio
 	if !ok {
 		return admission.Warnings{}, errors.New("obj convert User is error")
 	}
+
 	userlog.Info("validate create", "name", user.Name)
+
 	if err := user.validateCSRExpirationSeconds(); err != nil {
 		return admission.Warnings{}, err
 	}
-	return admission.Warnings{}, validateAnnotationKeyNotEmpty(user.ObjectMeta, UserAnnotationDisplayKey)
+
+	return admission.Warnings{}, validateAnnotationKeyNotEmpty(
+		user.ObjectMeta,
+		UserAnnotationDisplayKey,
+	)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *User) ValidateUpdate(ctx context.Context, old runtime.Object, new runtime.Object) (admission.Warnings, error) {
+func (r *User) ValidateUpdate(
+	ctx context.Context,
+	old, new runtime.Object,
+) (admission.Warnings, error) {
 	user, ok := new.(*User)
 	if !ok {
 		return admission.Warnings{}, errors.New("obj convert User is error")
 	}
+
 	userlog.Info("validate update", "name", user.Name)
+
 	if err := user.validateCSRExpirationSeconds(); err != nil {
 		return admission.Warnings{}, err
 	}
-	return admission.Warnings{}, validateAnnotationKeyNotEmpty(user.ObjectMeta, UserAnnotationDisplayKey)
+
+	return admission.Warnings{}, validateAnnotationKeyNotEmpty(
+		user.ObjectMeta,
+		UserAnnotationDisplayKey,
+	)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
@@ -101,6 +121,11 @@ func (r *User) ValidateDelete(ctx context.Context, obj runtime.Object) (admissio
 	if !ok {
 		return admission.Warnings{}, errors.New("obj convert User is error")
 	}
+
 	userlog.Info("validate delete", "name", user.Name)
-	return admission.Warnings{}, validateAnnotationKeyNotEmpty(user.ObjectMeta, UserAnnotationDisplayKey)
+
+	return admission.Warnings{}, validateAnnotationKeyNotEmpty(
+		user.ObjectMeta,
+		UserAnnotationDisplayKey,
+	)
 }

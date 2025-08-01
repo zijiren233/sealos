@@ -23,7 +23,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"hash"
 
 	"github.com/davecgh/go-spew/spew"
@@ -32,8 +31,9 @@ import (
 // DeepHashObject writes specified object to hash using the spew library
 // which follows pointers and prints actual values of the nested objects
 // ensuring the hash does not change when a pointer changes.
-func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
+func DeepHashObject(hasher hash.Hash, objectToWrite any) {
 	hasher.Reset()
+
 	printer := spew.ConfigState{
 		Indent:         " ",
 		SortKeys:       true,
@@ -44,15 +44,17 @@ func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 }
 
 // HashToString gen hash string base on actual values of the nested objects.
-func HashToString(obj interface{}) string {
+func HashToString(obj any) string {
 	// nosemgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-md5
 	hasher := md5.New()
 	DeepHashObject(hasher, obj)
+
 	return hex.EncodeToString(hasher.Sum(nil)[0:])
 }
 
-func Hash(data interface{}) string {
+func Hash(data any) string {
 	dataByte, _ := json.Marshal(data)
 	sum := sha256.Sum256(dataByte)
-	return fmt.Sprintf("%x", sum)
+
+	return hex.EncodeToString(sum[:])
 }

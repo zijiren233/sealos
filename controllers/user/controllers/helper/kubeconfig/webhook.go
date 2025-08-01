@@ -19,16 +19,15 @@ package kubeconfig
 import (
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"k8s.io/client-go/rest"
-
 	"k8s.io/client-go/tools/clientcmd/api"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (c *WebhookConfig) Apply(_ *rest.Config, _ client.Client) (*api.Config, error) {
 	// make sure cadata is loaded into config under incluster mode
 	ctx := fmt.Sprintf("%s@%s", c.user, c.clusterName)
+
 	return &api.Config{
 		Clusters: map[string]*api.Cluster{
 			c.clusterName: {

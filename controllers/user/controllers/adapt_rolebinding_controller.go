@@ -19,22 +19,16 @@ package controllers
 import (
 	"context"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
-	"github.com/labring/sealos/controllers/user/controllers/helper/config"
-
-	"sigs.k8s.io/controller-runtime/pkg/builder"
-
-	v1 "k8s.io/api/rbac/v1"
-
-	"sigs.k8s.io/controller-runtime/pkg/event"
-
-	userv1 "github.com/labring/sealos/controllers/user/api/v1"
-
 	"github.com/go-logr/logr"
+	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	"github.com/labring/sealos/controllers/user/controllers/helper/config"
+	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 // TODO This controller is used to adapt the old RoleBinding. only need to deploy the logic once for conversion and delete the controller in the future
@@ -46,7 +40,10 @@ type AdaptRoleBindingReconciler struct {
 	Logger logr.Logger
 }
 
-func (r *AdaptRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AdaptRoleBindingReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	rolebinding := &v1.RoleBinding{}
 	if err := r.Get(ctx, req.NamespacedName, rolebinding); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -59,42 +56,49 @@ func (r *AdaptRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if rolebinding.Subjects[0].Namespace != config.GetUserSystemNamespace() {
 		userName := rolebinding.GetAnnotations()[userAnnotationOwnerKey]
+
 		user := &userv1.User{}
 		if err := r.Get(ctx, client.ObjectKey{Name: userName}, user); err != nil {
 			r.Logger.Error(err, "get user failed")
 			return ctrl.Result{}, err
 		}
+
 		appendSubject := rolebinding.Subjects[0].DeepCopy()
 		appendSubject.Namespace = config.GetUserSystemNamespace()
+
 		rolebinding.Subjects = append(rolebinding.Subjects, *appendSubject)
 		if err := r.Update(ctx, rolebinding); err != nil {
 			r.Logger.Error(err, "update rolebinding failed")
 			return ctrl.Result{}, err
 		}
+
 		if err := controllerutil.SetControllerReference(user, rolebinding, r.Scheme); err != nil {
 			r.Logger.Error(err, "set controller reference failed")
 			return ctrl.Result{}, err
 		}
 	}
+
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AdaptRoleBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	const controllerName = "adapt_rolebinding_controller"
+
 	if r.Client == nil {
 		r.Client = mgr.GetClient()
 	}
+
 	r.Logger = ctrl.Log.WithName(controllerName)
 	r.Scheme = mgr.GetScheme()
 	r.Logger.V(1).Info("init reconcile AdaptRoleBinding controller")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.RoleBinding{}, builder.WithPredicates(WorkspacePredicate{})).
 		Complete(r)
 }
 
-type WorkspacePredicate struct {
-}
+type WorkspacePredicate struct{}
 
 func (WorkspacePredicate) Create(e event.CreateEvent) bool {
 	return isWorkspaceObject(e.Object)
@@ -117,13 +121,16 @@ func isWorkspaceObject(obj client.Object) bool {
 	if !ok {
 		return false
 	}
+
 	anno := obj.GetAnnotations()
 	if anno == nil {
 		return false
 	}
+
 	if anno["user.sealos.io/owner"] == "" {
 		return false
 	}
+
 	if len(obj.GetOwnerReferences()) > 0 {
 		return false
 	}
@@ -133,5 +140,6 @@ func isWorkspaceObject(obj client.Object) bool {
 			return false
 		}
 	}
+
 	return true
 }
