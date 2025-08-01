@@ -16,7 +16,7 @@ type RestartableServer struct {
 }
 
 func (rs *RestartableServer) Serve(c *vlogsServer.Config) {
-	var vs, err = vlogsServer.NewVLogsServer(c)
+	vs, err := vlogsServer.NewVLogsServer(c)
 	if err != nil {
 		fmt.Printf("Failed to create auth server: %s\n", err)
 		return
@@ -28,12 +28,15 @@ func (rs *RestartableServer) Serve(c *vlogsServer.Config) {
 	}
 
 	var listener net.Listener
+
 	listener, err = net.Listen("tcp", c.Server.ListenAddress)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Printf("Serve on %s\n", c.Server.ListenAddress)
+
 	if err := hs.Serve(listener); err != nil {
 		fmt.Println(err)
 		return
@@ -56,6 +59,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+
 	rs := RestartableServer{
 		configFile: cf,
 	}
