@@ -16,7 +16,7 @@ package clusterid
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"

@@ -15,6 +15,8 @@
 package meta
 
 import (
+	"time"
+
 	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	claimsutil "github.com/labring/sealos/controllers/license/internal/util/claims"
 	licenseutil "github.com/labring/sealos/controllers/license/internal/util/license"

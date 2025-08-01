@@ -14,9 +14,7 @@
 
 package errors
 
-import (
-	"fmt"
-)
+import "errors"
 
 var (
 	ErrLicenseInvalid         = errors.New("the license provided appears to be invalid")

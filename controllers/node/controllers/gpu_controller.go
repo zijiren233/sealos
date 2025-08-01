@@ -79,10 +79,16 @@ func (r *GpuReconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 		r.Logger.Error(err, "failed to get pod list")
 		return ctrl.Result{}, err
 	}
+
 	return r.applyGPUInfoCM(ctx, nodeList, podList, nil)
 }
 
-func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.NodeList, podList *corev1.PodList, clientSet *kubernetes.Clientset) (ctrl.Result, error) {
+func (r *GpuReconciler) applyGPUInfoCM(
+	ctx context.Context,
+	nodeList *corev1.NodeList,
+	podList *corev1.PodList,
+	clientSet *kubernetes.Clientset,
+) (ctrl.Result, error) {
 	/*
 		"nodeMap": {
 			"sealos-poc-gpu-master-0":{},
@@ -90,6 +96,7 @@ func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.Nod
 		}
 	*/
 	nodeMap := make(map[string]map[string]string)
+
 	var nodeName string
 	// get the GPU product, GPU memory, GPU allocatable number on the node
 	for _, node := range nodeList.Items {
@@ -97,12 +104,15 @@ func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.Nod
 		if _, ok := nodeMap[nodeName]; !ok {
 			nodeMap[nodeName] = make(map[string]string)
 		}
+
 		gpuProduct, ok1 := node.Labels[NvidiaGPUProduct]
 		gpuMemory, ok2 := node.Labels[NvidiaGPUMemory]
+
 		gpuCount, ok3 := node.Status.Allocatable[NvidiaGPU]
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
+
 		nodeMap[nodeName][GPUProduct] = gpuProduct
 		nodeMap[nodeName][GPUMemory] = gpuMemory
 		nodeMap[nodeName][GPUCount] = gpuCount.String()
@@ -116,6 +126,7 @@ func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.Nod
 
 		nodeName = pod.Spec.NodeName
 		_, ok1 := nodeMap[nodeName]
+
 		gpuProduct, ok2 := pod.Spec.NodeSelector[NvidiaGPUProduct]
 		if !ok1 || !ok2 {
 			continue
@@ -127,12 +138,16 @@ func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.Nod
 			if !ok {
 				continue
 			}
-			r.Logger.V(1).Info("pod using GPU", "name", pod.Name, "namespace", pod.Namespace, "gpuCount", gpuCount, "gpuProduct", gpuProduct)
+
+			r.Logger.V(1).
+				Info("pod using GPU", "name", pod.Name, "namespace", pod.Namespace, "gpuCount", gpuCount, "gpuProduct", gpuProduct)
+
 			oldCount, err := strconv.ParseInt(nodeMap[nodeName][GPUCount], 10, 64)
 			if err != nil {
 				r.Logger.Error(err, "failed to parse gpu.count string to int64")
 				return ctrl.Result{}, err
 			}
+
 			newCount := oldCount - gpuCount.Value()
 			nodeMap[nodeName][GPUCount] = strconv.FormatInt(newCount, 10)
 		}
@@ -144,13 +159,16 @@ func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.Nod
 		r.Logger.Error(err, "failed to marshal node map to JSON string")
 		return ctrl.Result{}, err
 	}
+
 	nodeMapStr := string(nodeMapBytes)
 
 	// create or update gpu-info configmap
 	configmap := &corev1.ConfigMap{}
 
 	if clientSet != nil {
-		configmap, err = clientSet.CoreV1().ConfigMaps(GPUInfoNameSpace).Get(ctx, GPUInfo, metaV1.GetOptions{})
+		configmap, err = clientSet.CoreV1().
+			ConfigMaps(GPUInfoNameSpace).
+			Get(ctx, GPUInfo, metaV1.GetOptions{})
 	} else {
 		err = r.Get(ctx, types.NamespacedName{Name: GPUInfo, Namespace: GPUInfoNameSpace}, configmap)
 	}
@@ -177,6 +195,7 @@ func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.Nod
 	if configmap.Data == nil {
 		configmap.Data = map[string]string{}
 	}
+
 	if configmap.Data[GPU] != nodeMapStr {
 		configmap.Data[GPU] = nodeMapStr
 		if err := r.Update(ctx, configmap); err != nil && !errors.IsConflict(err) {
@@ -186,6 +205,7 @@ func (r *GpuReconciler) applyGPUInfoCM(ctx context.Context, nodeList *corev1.Nod
 	}
 
 	r.Logger.V(1).Info("gpu-info configmap status", "gpu", configmap.Data[GPU])
+
 	return ctrl.Result{}, nil
 }
 
@@ -204,6 +224,7 @@ func (r *GpuReconciler) initGPUInfoCM(ctx context.Context, clientSet *kubernetes
 	}
 
 	podList := &corev1.PodList{}
+
 	for _, item := range nodeList.Items {
 		list, err := clientSet.CoreV1().Pods("").List(context.TODO(), metaV1.ListOptions{
 			FieldSelector: fields.OneTermEqualSelector("spec.nodeName", item.Name).String(),
@@ -211,10 +232,12 @@ func (r *GpuReconciler) initGPUInfoCM(ctx context.Context, clientSet *kubernetes
 		if err != nil {
 			return err
 		}
+
 		podList.Items = append(podList.Items, list.Items...)
 	}
 
 	_, err = r.applyGPUInfoCM(ctx, nodeList, podList, clientSet)
+
 	return err
 }
 
@@ -232,6 +255,7 @@ func (r *GpuReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// init node-gpu-info configmap
 	r.Logger.V(1).Info("initializing node-gpu-info configmap")
+
 	if err := r.initGPUInfoCM(context.Background(), clientSet); err != nil {
 		return err
 	}
@@ -304,5 +328,6 @@ func hasGPU(obj client.Object) bool {
 	_, ok1 := obj.(*corev1.Node).Labels[NvidiaGPUMemory]
 	_, ok2 := obj.(*corev1.Node).Labels[NvidiaGPUProduct]
 	_, ok3 := obj.(*corev1.Node).Status.Allocatable[NvidiaGPU]
+
 	return ok1 && ok2 && ok3
 }
