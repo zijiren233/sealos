@@ -20,39 +20,46 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/labring/sealos/controllers/pkg/utils/retry"
-
 	"github.com/labring/sealos/controllers/job/init/internal/util/common"
-
 	"github.com/labring/sealos/controllers/pkg/database"
-	"github.com/labring/sealos/controllers/pkg/utils/logger"
-
 	"github.com/labring/sealos/controllers/pkg/database/cockroach"
 	"github.com/labring/sealos/controllers/pkg/types"
+	"github.com/labring/sealos/controllers/pkg/utils/logger"
+	"github.com/labring/sealos/controllers/pkg/utils/retry"
 )
 
 func PresetAdminUser() error {
-	v2Account, err := cockroach.NewCockRoach(os.Getenv(database.GlobalCockroachURI), os.Getenv(database.LocalCockroachURI))
+	v2Account, err := cockroach.NewCockRoach(
+		os.Getenv(database.GlobalCockroachURI),
+		os.Getenv(database.LocalCockroachURI),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to connect to cockroach: %v", err)
+		return fmt.Errorf("failed to connect to cockroach: %w", err)
 	}
+
 	defer func() {
 		err := v2Account.Close()
 		if err != nil {
 			logger.Warn("failed to close cockroach connection: %v", err)
 		}
 	}()
+
 	domain := os.Getenv("DOMAIN")
 	if domain == "" {
-		return fmt.Errorf("'DOMAIN' the environment variable is not set. please check")
+		return errors.New("'DOMAIN' the environment variable is not set. please check")
 	}
+
 	regionUID, err := uuid.Parse(os.Getenv(cockroach.EnvLocalRegion))
 	if err != nil {
-		return fmt.Errorf("failed to parse region %s uid: %v", os.Getenv(cockroach.EnvLocalRegion), err)
+		return fmt.Errorf(
+			"failed to parse region %s uid: %w",
+			os.Getenv(cockroach.EnvLocalRegion),
+			err,
+		)
 	}
+
 	err = retry.Retry(10, 3*time.Second, func() error {
-		tableTypes := []interface{}{
+		tableTypes := []any{
 			types.User{},
 			types.Region{},
 			types.RegionUserCr{},
@@ -65,11 +72,13 @@ func PresetAdminUser() error {
 				return err
 			}
 		}
+
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to check user table: %v", err)
+		return fmt.Errorf("failed to check user table: %w", err)
 	}
+
 	if err = v2Account.CreateRegion(&types.Region{
 		UID:         regionUID,
 		Domain:      domain,
@@ -84,9 +93,11 @@ func PresetAdminUser() error {
 			},
 		}),
 	}); err != nil {
-		return fmt.Errorf("failed to create region: %v", err)
+		return fmt.Errorf("failed to create region: %w", err)
 	}
+
 	userNanoID := "admin"
+
 	genUserCrUID, genWorkspaceUID := uuid.New(), uuid.New()
 	if err = v2Account.CreateUser(&types.OauthProvider{
 		UserUID:      common.AdminUID(),
@@ -125,23 +136,28 @@ func PresetAdminUser() error {
 		UpdatedAt:    time.Now(),
 		JoinAt:       time.Now(),
 	}); err != nil {
-		return fmt.Errorf("failed to create user: %v", err)
+		return fmt.Errorf("failed to create user: %w", err)
 	}
+
 	if err = v2Account.InitTables(); err != nil {
-		return fmt.Errorf("failed to init tables: %v", err)
+		return fmt.Errorf("failed to init tables: %w", err)
 	}
+
 	if _, err = v2Account.NewAccount(&types.UserQueryOpts{Owner: adminUserName}); err != nil {
-		return fmt.Errorf("failed to create account: %v", err)
+		return fmt.Errorf("failed to create account: %w", err)
 	}
+
 	if err = v2Account.AddBalance(&types.UserQueryOpts{Owner: adminUserName}, 9999999_000_000); err != nil {
-		return fmt.Errorf("failed to add balance: %v", err)
+		return fmt.Errorf("failed to add balance: %w", err)
 	}
+
 	return nil
 }
 
-func checkTableExists(m *cockroach.Cockroach, tableType interface{}) error {
+func checkTableExists(m *cockroach.Cockroach, tableType any) error {
 	if !m.DB.Migrator().HasTable(tableType) && !m.Localdb.Migrator().HasTable(tableType) {
 		return fmt.Errorf("%T table is null, please check", tableType)
 	}
+
 	return nil
 }

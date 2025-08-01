@@ -22,5 +22,6 @@ func AdminUID() uuid.UUID {
 	if adminUID == uuid.Nil {
 		adminUID = uuid.New()
 	}
+
 	return adminUID
 }
