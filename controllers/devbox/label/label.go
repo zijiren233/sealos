@@ -44,18 +44,23 @@ func (r *Recommended) Labels() map[string]string {
 	if r.Name != "" {
 		ret[AppName] = r.Name
 	}
+
 	if r.Instance != "" {
 		ret[AppInstance] = r.Instance
 	}
+
 	if r.Version != "" {
 		ret[AppVersion] = r.Version
 	}
+
 	if r.Component != "" {
 		ret[AppComponent] = r.Component
 	}
+
 	if r.PartOf != "" {
 		ret[AppPartOf] = r.PartOf
 	}
+
 	if r.ManagedBy != "" {
 		ret[AppManagedBy] = r.ManagedBy
 	}

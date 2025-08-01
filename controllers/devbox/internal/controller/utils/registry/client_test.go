@@ -21,12 +21,14 @@ func TestClient_TagImage(t1 *testing.T) {
 		Username string
 		Password string
 	}
+
 	type args struct {
 		hostName  string
 		imageName string
 		oldTag    string
 		newTag    string
 	}
+
 	tests := []struct {
 		name    string
 		fields  fields

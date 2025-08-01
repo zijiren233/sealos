@@ -22,18 +22,22 @@ import (
 	"os"
 	"time"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/rest"
-	"k8s.io/utils/ptr"
-
+	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
+	"github.com/labring/sealos/controllers/devbox/internal/controller"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/matcher"
+	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/registry"
+	utilresource "github.com/labring/sealos/controllers/devbox/internal/controller/utils/resource"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	// to ensure that exec-entrypoint and run can make use of them.
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,13 +47,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	devboxv1alpha1 "github.com/labring/sealos/controllers/devbox/api/v1alpha1"
-	"github.com/labring/sealos/controllers/devbox/internal/controller"
-	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/matcher"
-	"github.com/labring/sealos/controllers/devbox/internal/controller/utils/registry"
-	utilresource "github.com/labring/sealos/controllers/devbox/internal/controller/utils/resource"
-	// +kubebuilder:scaffold:imports
 )
 
 var (
@@ -65,42 +62,67 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	var secureMetrics bool
-	var enableHTTP2 bool
-	var tlsOpts []func(*tls.Config)
+	var (
+		metricsAddr          string
+		enableLeaderElection bool
+		probeAddr            string
+		secureMetrics        bool
+		enableHTTP2          bool
+		tlsOpts              []func(*tls.Config)
+	)
 	// debug flag
 	var debugMode bool
 	// registry flag
-	var registryAddr string
-	var registryUser string
-	var registryPassword string
+	var (
+		registryAddr     string
+		registryUser     string
+		registryPassword string
+	)
 	// resource flag
-	var requestCPURate float64
-	var requestMemoryRate float64
-	var requestEphemeralStorage string
-	var limitEphemeralStorage string
-	var maximumLimitEphemeralStorage string
+	var (
+		requestCPURate               float64
+		requestMemoryRate            float64
+		requestEphemeralStorage      string
+		limitEphemeralStorage        string
+		maximumLimitEphemeralStorage string
+	)
 	// pod matcher flag
-	var enablePodResourceMatcher bool
-	var enablePodEnvMatcher bool
-	var enablePodPortMatcher bool
-	var enablePodEphemeralStorageMatcher bool
+	var (
+		enablePodResourceMatcher         bool
+		enablePodEnvMatcher              bool
+		enablePodPortMatcher             bool
+		enablePodEphemeralStorageMatcher bool
+	)
 	// config qps and burst
-	var configQPS int
-	var configBurst int
+	var (
+		configQPS   int
+		configBurst int
+	)
 	// config restart predicate duration
 	var restartPredicateDuration time.Duration
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
-		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+
+	flag.StringVar(
+		&metricsAddr,
+		"metrics-bind-address",
+		"0",
+		"The address the metrics endpoint binds to. "+
+			"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.",
+	)
+	flag.StringVar(
+		&probeAddr,
+		"health-probe-bind-address",
+		":8081",
+		"The address the probe endpoint binds to.",
+	)
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&secureMetrics, "metrics-secure", true,
-		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
+	flag.BoolVar(
+		&secureMetrics,
+		"metrics-secure",
+		true,
+		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.",
+	)
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	// debug flag
@@ -108,23 +130,79 @@ func main() {
 	// registry flag
 	flag.StringVar(&registryAddr, "registry-addr", "sealos.hub:5000", "The address of the registry")
 	flag.StringVar(&registryUser, "registry-user", "admin", "The user of the registry")
-	flag.StringVar(&registryPassword, "registry-password", "passw0rd", "The password of the registry")
+	flag.StringVar(
+		&registryPassword,
+		"registry-password",
+		"passw0rd",
+		"The password of the registry",
+	)
 	// resource flag
-	flag.Float64Var(&requestCPURate, "request-cpu-rate", 10, "The request rate of cpu limit in devbox.")
-	flag.Float64Var(&requestMemoryRate, "request-memory-rate", 10, "The request rate of memory limit in devbox.")
-	flag.StringVar(&requestEphemeralStorage, "request-ephemeral-storage", "500Mi", "The default request value of ephemeral storage in devbox.")
-	flag.StringVar(&limitEphemeralStorage, "limit-ephemeral-storage", "10Gi", "The default limit value of ephemeral storage in devbox.")
-	flag.StringVar(&maximumLimitEphemeralStorage, "maximum-limit-ephemeral-storage", "50Gi", "The maximum limit value of ephemeral storage in devbox.")
+	flag.Float64Var(
+		&requestCPURate,
+		"request-cpu-rate",
+		10,
+		"The request rate of cpu limit in devbox.",
+	)
+	flag.Float64Var(
+		&requestMemoryRate,
+		"request-memory-rate",
+		10,
+		"The request rate of memory limit in devbox.",
+	)
+	flag.StringVar(
+		&requestEphemeralStorage,
+		"request-ephemeral-storage",
+		"500Mi",
+		"The default request value of ephemeral storage in devbox.",
+	)
+	flag.StringVar(
+		&limitEphemeralStorage,
+		"limit-ephemeral-storage",
+		"10Gi",
+		"The default limit value of ephemeral storage in devbox.",
+	)
+	flag.StringVar(
+		&maximumLimitEphemeralStorage,
+		"maximum-limit-ephemeral-storage",
+		"50Gi",
+		"The maximum limit value of ephemeral storage in devbox.",
+	)
 	// pod matcher flag, pod resource matcher, env matcher, port matcher will be enabled by default, ephemeral storage matcher will be disabled by default
-	flag.BoolVar(&enablePodResourceMatcher, "enable-pod-resource-matcher", true, "If set, pod resource matcher will be enabled")
-	flag.BoolVar(&enablePodEnvMatcher, "enable-pod-env-matcher", true, "If set, pod env matcher will be enabled")
-	flag.BoolVar(&enablePodPortMatcher, "enable-pod-port-matcher", true, "If set, pod port matcher will be enabled")
-	flag.BoolVar(&enablePodEphemeralStorageMatcher, "enable-pod-ephemeral-storage-matcher", false, "If set, pod ephemeral storage matcher will be enabled")
+	flag.BoolVar(
+		&enablePodResourceMatcher,
+		"enable-pod-resource-matcher",
+		true,
+		"If set, pod resource matcher will be enabled",
+	)
+	flag.BoolVar(
+		&enablePodEnvMatcher,
+		"enable-pod-env-matcher",
+		true,
+		"If set, pod env matcher will be enabled",
+	)
+	flag.BoolVar(
+		&enablePodPortMatcher,
+		"enable-pod-port-matcher",
+		true,
+		"If set, pod port matcher will be enabled",
+	)
+	flag.BoolVar(
+		&enablePodEphemeralStorageMatcher,
+		"enable-pod-ephemeral-storage-matcher",
+		false,
+		"If set, pod ephemeral storage matcher will be enabled",
+	)
 	// config qps and burst
 	flag.IntVar(&configQPS, "config-qps", 50, "The qps of the config")
 	flag.IntVar(&configBurst, "config-burst", 100, "The burst of the config")
 	// config restart predicate duration
-	flag.DurationVar(&restartPredicateDuration, "restart-predicate-duration", 2*time.Hour, "Sets the restart predicate time duration for devbox controller restart. By default, the duration is set to 2 hours.")
+	flag.DurationVar(
+		&restartPredicateDuration,
+		"restart-predicate-duration",
+		2*time.Hour,
+		"Sets the restart predicate time duration for devbox controller restart. By default, the duration is set to 2 hours.",
+	)
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -141,6 +219,7 @@ func main() {
 	// - https://github.com/advisories/GHSA-4374-p667-p6c8
 	disableHTTP2 := func(c *tls.Config) {
 		setupLog.Info("disabling http/2")
+
 		c.NextProtos = []string{"http/1.1"}
 	}
 
@@ -226,12 +305,15 @@ func main() {
 	if enablePodResourceMatcher {
 		podMatchers = append(podMatchers, matcher.ResourceMatcher{})
 	}
+
 	if enablePodEnvMatcher {
 		podMatchers = append(podMatchers, matcher.EnvVarMatcher{})
 	}
+
 	if enablePodPortMatcher {
 		podMatchers = append(podMatchers, matcher.PortMatcher{})
 	}
+
 	if enablePodEphemeralStorageMatcher {
 		podMatchers = append(podMatchers, matcher.EphemeralStorageMatcher{})
 	}
@@ -269,11 +351,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DevBoxRelease")
 		os.Exit(1)
 	}
-	//if err = (&controller.OperationRequestReconciler{
+	// if err = (&controller.OperationRequestReconciler{
 	//	CommitImageRegistry: registryAddr,
 	//	Client:              mgr.GetClient(),
 	//	Scheme:              mgr.GetScheme(),
-	//}).SetupWithManager(mgr); err != nil {
+	// }).SetupWithManager(mgr); err != nil {
 	//	setupLog.Error(err, "unable to create controller", "controller", "OperationRequest")
 	//	os.Exit(1)
 	//}
@@ -283,12 +365,14 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
+
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
 
 	setupLog.Info("starting manager")
+
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

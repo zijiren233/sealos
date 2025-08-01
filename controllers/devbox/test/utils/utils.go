@@ -43,6 +43,7 @@ func InstallPrometheusOperator() error {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
 	cmd := exec.Command("kubectl", "create", "-f", url)
 	_, err := Run(cmd)
+
 	return err
 }
 
@@ -58,9 +59,10 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
 	command := strings.Join(cmd.Args, " ")
 	_, _ = fmt.Fprintf(v2.GinkgoWriter, "running: %s\n", command)
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return output, fmt.Errorf("%s failed with error: (%v) %s", command, err, string(output))
+		return output, fmt.Errorf("%s failed with error: (%w) %s", command, err, string(output))
 	}
 
 	return output, nil
@@ -69,6 +71,7 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 // UninstallPrometheusOperator uninstalls the prometheus
 func UninstallPrometheusOperator() {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
+
 	cmd := exec.Command("kubectl", "delete", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
@@ -78,6 +81,7 @@ func UninstallPrometheusOperator() {
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+
 	cmd := exec.Command("kubectl", "delete", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
@@ -87,6 +91,7 @@ func UninstallCertManager() {
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+
 	cmd := exec.Command("kubectl", "apply", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		return err
@@ -100,6 +105,7 @@ func InstallCertManager() error {
 	)
 
 	_, err := Run(cmd)
+
 	return err
 }
 
@@ -109,9 +115,11 @@ func LoadImageToKindClusterWithName(name string) error {
 	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
 		cluster = v
 	}
+
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
 	cmd := exec.Command("kind", kindOptions...)
 	_, err := Run(cmd)
+
 	return err
 }
 
@@ -119,6 +127,7 @@ func LoadImageToKindClusterWithName(name string) error {
 // according to line breakers, and ignores the empty elements in it.
 func GetNonEmptyLines(output string) []string {
 	var res []string
+
 	elements := strings.Split(output, "\n")
 	for _, element := range elements {
 		if element != "" {
@@ -135,6 +144,8 @@ func GetProjectDir() (string, error) {
 	if err != nil {
 		return wd, err
 	}
-	wd = strings.Replace(wd, "/test/e2e", "", -1)
+
+	wd = strings.ReplaceAll(wd, "/test/e2e", "")
+
 	return wd, nil
 }
