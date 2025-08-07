@@ -69,7 +69,7 @@ const (
 )
 
 const (
-	SecretHeaderPrefix = "X-SEALOS-"
+	SecretHeaderPrefix = "X-SEALOS-" // #nosec G101 -- This is not a credential, it's a header prefix
 )
 
 // TerminalReconciler reconciles a Terminal object
@@ -183,14 +183,19 @@ func (r *TerminalReconciler) syncIngress(
 	recLabels map[string]string,
 ) error {
 	var err error
-	host := hostname + "." + r.CtrConfig.Global.CloudDomain
+	host := hostname + "." + r.CtrConfig.CloudDomain
 	if terminal.Spec.IngressType == terminalv1.Nginx {
 		err = r.syncNginxIngress(ctx, terminal, host, recLabels)
 	}
 	return err
 }
 
-func (r *TerminalReconciler) syncNginxIngress(ctx context.Context, terminal *terminalv1.Terminal, host string, recLabels map[string]string) error {
+func (r *TerminalReconciler) syncNginxIngress(
+	ctx context.Context,
+	terminal *terminalv1.Terminal,
+	host string,
+	recLabels map[string]string,
+) error {
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      terminal.Name,
@@ -397,10 +402,10 @@ func isExpired(terminal *terminalv1.Terminal) bool {
 }
 
 func (r *TerminalReconciler) getPort() string {
-	if r.CtrConfig.Global.CloudPort == "" || r.CtrConfig.Global.CloudPort == "80" || r.CtrConfig.Global.CloudPort == "443" {
+	if r.CtrConfig.CloudPort == "" || r.CtrConfig.CloudPort == "80" || r.CtrConfig.CloudPort == "443" {
 		return ""
 	}
-	return ":" + r.CtrConfig.Global.CloudPort
+	return ":" + r.CtrConfig.CloudPort
 }
 
 func (r *TerminalReconciler) generateSecretHeader() string {

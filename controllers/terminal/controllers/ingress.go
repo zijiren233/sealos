@@ -39,8 +39,8 @@ func (r *TerminalReconciler) createNginxIngress(
 ) *networkingv1.Ingress {
 	cors := fmt.Sprintf(
 		"https://%s,https://*.%s",
-		r.CtrConfig.Global.CloudDomain+r.getPort(),
-		r.CtrConfig.Global.CloudDomain+r.getPort(),
+		r.CtrConfig.CloudDomain+r.getPort(),
+		r.CtrConfig.CloudDomain+r.getPort(),
 	)
 
 	secretHeader := terminal.Status.SecretHeader
