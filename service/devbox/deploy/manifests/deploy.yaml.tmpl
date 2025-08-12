@@ -56,5 +56,14 @@ spec:
           ports:
             - containerPort: 8092
           imagePullPolicy: Always
+          startupProbe:
+            httpGet:
+              port: 8092
+              path: /health
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 30
+            successThreshold: 1
+            timeoutSeconds: 1
       serviceAccountName: default
       automountServiceAccountToken: false
