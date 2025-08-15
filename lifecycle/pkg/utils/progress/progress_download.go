@@ -24,7 +24,6 @@ import (
 	"strconv"
 
 	http2 "github.com/labring/sealos/pkg/utils/http"
-
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -36,7 +35,7 @@ func Download(srcFile, destFile string) error {
 		// open as url
 		resp, err := http.Get(sourceName)
 		if err != nil {
-			return fmt.Errorf("can't get %s: %v", sourceName, err)
+			return fmt.Errorf("can't get %s: %w", sourceName, err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
@@ -49,13 +48,13 @@ func Download(srcFile, destFile string) error {
 		// open as file
 		s, err := os.Open(sourceName)
 		if err != nil {
-			return fmt.Errorf("can't open %s: %v", sourceName, err)
+			return fmt.Errorf("can't open %s: %w", sourceName, err)
 		}
 		defer s.Close()
 		// get source size
 		sourceStat, err := s.Stat()
 		if err != nil {
-			return fmt.Errorf("can't stat %s: %v", sourceName, err)
+			return fmt.Errorf("can't stat %s: %w", sourceName, err)
 		}
 		sourceSize = sourceStat.Size()
 		source = s

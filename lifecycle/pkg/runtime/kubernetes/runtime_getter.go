@@ -22,17 +22,16 @@ import (
 	"path"
 	"strings"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/labring/sealos/pkg/client-go/kubernetes"
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/types/v1beta1"
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"golang.org/x/sync/errgroup"
 )
 
 func (k *KubeadmRuntime) getKubeVersion() string {
-	return k.kubeadmConfig.ClusterConfiguration.KubernetesVersion
+	return k.kubeadmConfig.KubernetesVersion
 }
 
 // old implementation doesn't consider multiple rootfs images; here get the first rootfs image
@@ -92,17 +91,19 @@ func (k *KubeadmRuntime) execIPVSClean(ip string) error {
 func (k *KubeadmRuntime) syncNodeIPVSYaml(masterIPs, nodesIPs []string) error {
 	masters := make([]string, 0)
 	for _, master := range masterIPs {
-		masters = append(masters, fmt.Sprintf("%s:%d", iputils.GetHostIP(master), k.getAPIServerPort()))
+		masters = append(
+			masters,
+			fmt.Sprintf("%s:%d", iputils.GetHostIP(master), k.getAPIServerPort()),
+		)
 	}
 
 	eg, _ := errgroup.WithContext(context.Background())
 	for _, node := range nodesIPs {
-		node := node
 		eg.Go(func() error {
 			logger.Info("start to sync lvscare static pod to node: %s master: %+v", node, masters)
 			err := k.execIPVSPod(node, masters)
 			if err != nil {
-				return fmt.Errorf("update lvscare static pod failed %s %v", node, err)
+				return fmt.Errorf("update lvscare static pod failed %s %w", node, err)
 			}
 			return nil
 		})
@@ -112,7 +113,14 @@ func (k *KubeadmRuntime) syncNodeIPVSYaml(masterIPs, nodesIPs []string) error {
 
 func (k *KubeadmRuntime) execIPVSPod(ip string, masters []string) error {
 	image := k.cluster.GetLvscareImage()
-	return k.remoteUtil.StaticPod(ip, k.getVipAndPort(), constants.LvsCareStaticPodName, image, masters, kubernetesEtcStaticPod)
+	return k.remoteUtil.StaticPod(
+		ip,
+		k.getVipAndPort(),
+		constants.LvsCareStaticPodName,
+		image,
+		masters,
+		kubernetesEtcStaticPod,
+	)
 }
 
 func (k *KubeadmRuntime) execToken(ip, certificateKey string) (string, error) {
@@ -133,14 +141,21 @@ func (k *KubeadmRuntime) execCert(ip string) error {
 	if err != nil {
 		return err
 	}
-	return k.remoteUtil.Cert(ip, k.getCertSANs(), iputils.GetHostIP(ip), hostname, k.getServiceCIDR(), k.getDNSDomain())
+	return k.remoteUtil.Cert(
+		ip,
+		k.getCertSANs(),
+		iputils.GetHostIP(ip),
+		hostname,
+		k.getServiceCIDR(),
+		k.getDNSDomain(),
+	)
 }
 
 func (k *KubeadmRuntime) sshCmdAsync(host string, cmd ...string) error {
 	return k.execer.CmdAsync(host, cmd...)
 }
 
-func (k *KubeadmRuntime) sshCmdToString(host string, cmd string) (string, error) {
+func (k *KubeadmRuntime) sshCmdToString(host, cmd string) (string, error) {
 	return k.execer.CmdToString(host, cmd, "")
 }
 
@@ -152,7 +167,10 @@ func (k *KubeadmRuntime) getKubeInterface() (kubernetes.Client, error) {
 	if k.cli != nil {
 		return k.cli, nil
 	}
-	cli, err := kubernetes.NewKubernetesClient(k.pathResolver.AdminFile(), k.getMaster0IPAPIServer())
+	cli, err := kubernetes.NewKubernetesClient(
+		k.pathResolver.AdminFile(),
+		k.getMaster0IPAPIServer(),
+	)
 	if err != nil {
 		return nil, err
 	}

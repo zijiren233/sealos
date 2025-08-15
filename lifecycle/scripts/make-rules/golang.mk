@@ -89,7 +89,7 @@ go.tidy:
 .PHONY: go.lint
 go.lint: tools.verify.golangci-lint
 	@echo "===========> Run golangci to lint source codes"
-	@$(TOOLS_DIR)/golangci-lint run --build-tags=musl -c $(ROOT_DIR)/.golangci.yml
+	@$(TOOLS_DIR)/golangci-lint run --color=always --build-tags musl,containers_image_openpgp,netgo,exclude_graphdriver_devicemapper,static,osusergo,exclude_graphdriver_btrfs -c $(ROOT_DIR)/../.golangci.yml --fix -v
 
 .PHONY: go.format
 go.format: tools.verify.goimports

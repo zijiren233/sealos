@@ -18,7 +18,6 @@ import (
 	"net/http"
 
 	restful "github.com/emicklei/go-restful/v3"
-
 	"github.com/labring/sealos/pkg/utils/logger"
 )
 
@@ -31,7 +30,7 @@ func GoRestful(registerFunc func(*restful.WebService), addr string) error {
 	registerFunc(webService)
 
 	container.Add(webService)
-	//cors
+	// cors
 	Cors(container)
 
 	server := &http.Server{Addr: addr, Handler: container}

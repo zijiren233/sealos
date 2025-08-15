@@ -121,7 +121,11 @@ func (cc *clusterClient) CmdAsync(host string, cmds ...string) error {
 	return client.CmdAsync(host, cmds...)
 }
 
-func (cc *clusterClient) CmdAsyncWithContext(ctx context.Context, host string, cmds ...string) error {
+func (cc *clusterClient) CmdAsyncWithContext(
+	ctx context.Context,
+	host string,
+	cmds ...string,
+) error {
 	client, err := cc.getClientForHost(host)
 	if err != nil {
 		return err

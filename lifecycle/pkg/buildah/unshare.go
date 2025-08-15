@@ -25,9 +25,8 @@ import (
 
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/unshare"
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/spf13/cobra"
 )
 
 func newUnshareCommand() *cobra.Command {
@@ -48,7 +47,13 @@ func newUnshareCommand() *cobra.Command {
 	unshareCommand.SetUsageTemplate(UsageTemplate())
 	flags := unshareCommand.Flags()
 	flags.SetInterspersed(false)
-	flags.StringSliceVarP(&unshareMounts, "mount", "m", []string{}, "mount the specified containers (default [])")
+	flags.StringSliceVarP(
+		&unshareMounts,
+		"mount",
+		"m",
+		[]string{},
+		"mount the specified containers (default [])",
+	)
 	return unshareCommand
 }
 
@@ -61,19 +66,27 @@ func unshareMount(store storage.Store, mounts []string) ([]string, func(), error
 		for _, mounted := range mountedContainers {
 			builder, err := openBuilder(getContext(), store, mounted)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, fmt.Errorf("loading information about build container %q: %w", mounted, err))
+				fmt.Fprintln(
+					os.Stderr,
+					fmt.Errorf("loading information about build container %q: %w", mounted, err),
+				)
 				continue
 			}
 			err = builder.Unmount()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, fmt.Errorf("unmounting build container %q: %w", mounted, err))
+				fmt.Fprintln(
+					os.Stderr,
+					fmt.Errorf("unmounting build container %q: %w", mounted, err),
+				)
 				continue
 			}
 		}
 	}
 	for _, mountSpec := range mounts {
 		mount := strings.SplitN(mountSpec, "=", 2)
+		//nolint:copyloopvar
 		container := mountSpec
+
 		envVar := container
 		if len(mount) == 2 {
 			envVar = mount[0]
@@ -82,7 +95,11 @@ func unshareMount(store storage.Store, mounts []string) ([]string, func(), error
 		builder, err := openBuilder(getContext(), store, container)
 		if err != nil {
 			unmount()
-			return nil, nil, fmt.Errorf("loading information about build container %q: %w", container, err)
+			return nil, nil, fmt.Errorf(
+				"loading information about build container %q: %w",
+				container,
+				err,
+			)
 		}
 		mountPoint, err := builder.Mount(builder.MountLabel)
 		if err != nil {
@@ -127,6 +144,7 @@ func unshareCmd(c *cobra.Command, args []string) error {
 	bailOnError(err, "cannot get store")
 	// Temporary ignore it...
 	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	//nolint:gosec
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = unshare.RootlessEnv()
 	cmd.Stdin = os.Stdin
