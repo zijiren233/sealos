@@ -46,7 +46,7 @@ import (
 //
 //	return images, nil
 //}
-//for _, image := range images {
+// for _, image := range images {
 //		klog.V(5).InfoS("Adding image ID to currentImages", "imageID", image.ID)
 //		currentImages.Insert(image.ID)
 //

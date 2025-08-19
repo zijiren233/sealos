@@ -18,9 +18,9 @@ package server
 
 import (
 	"context"
-	"github.com/google/go-containerregistry/pkg/name"
 
 	rtype "github.com/docker/docker/api/types/registry"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/labring/sealos/pkg/utils/logger"
 	api "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
