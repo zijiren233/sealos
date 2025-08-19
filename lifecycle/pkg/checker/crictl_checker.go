@@ -205,6 +205,7 @@ func (n *CRICtlChecker) getCRICtlContainerList(crictlPath string) ([]Container, 
 	if err != nil {
 		return nil, err
 	}
+	//nolint:musttag
 	_ = json.Unmarshal([]byte(psOut), ps)
 
 	containerList := make([]Container, 0)
