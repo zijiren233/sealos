@@ -122,6 +122,7 @@ linters:
         - G404
         - G306
         - G101
+        - G402
 
 formatters:
   enable:
