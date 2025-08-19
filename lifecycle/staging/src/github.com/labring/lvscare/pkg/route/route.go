@@ -21,10 +21,9 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/vishvananda/netlink"
-
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/vishvananda/netlink"
 )
 
 var ErrNotIPV4Fmt = "IP %s is not valid IPV4 address"

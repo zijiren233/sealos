@@ -20,9 +20,8 @@ import (
 	"context"
 	"testing"
 
-	"k8s.io/client-go/kubernetes"
-
 	klient "github.com/labring/sealos/pkg/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes"
 )
 
 func TestGetKubeadmConfig(t *testing.T) {

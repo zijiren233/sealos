@@ -21,9 +21,8 @@ import (
 
 	rtype "github.com/docker/docker/api/types/registry"
 	"github.com/google/go-containerregistry/pkg/name"
-	api "k8s.io/cri-api/pkg/apis/runtime/v1"
-
 	"github.com/labring/sealos/pkg/utils/logger"
+	api "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 type v1ImageService struct {

@@ -19,9 +19,8 @@ import (
 	"fmt"
 	"slices"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/labring/sealos/pkg/utils/logger"
+	"golang.org/x/sync/errgroup"
 )
 
 const (

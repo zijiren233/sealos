@@ -20,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
-
 	"github.com/labring/sealos/pkg/client-go/kubernetes"
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/exec"

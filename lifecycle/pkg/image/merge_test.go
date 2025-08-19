@@ -19,9 +19,8 @@ package image_test
 import (
 	"testing"
 
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
-
 	"github.com/labring/sealos/pkg/image"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 func TestMerge(t *testing.T) {

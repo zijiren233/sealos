@@ -23,13 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/sftp"
-	"github.com/schollz/progressbar/v3"
-	"golang.org/x/crypto/ssh"
-
 	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/progress"
+	"github.com/pkg/sftp"
+	"github.com/schollz/progressbar/v3"
+	"golang.org/x/crypto/ssh"
 )
 
 func (c *Client) RemoteSha256Sum(host, remoteFilePath string) string {

@@ -23,11 +23,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/spf13/pflag"
-	"k8s.io/klog/v2"
-
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/utils/hosts"
+	"github.com/spf13/pflag"
+	"k8s.io/klog/v2"
 )
 
 const (

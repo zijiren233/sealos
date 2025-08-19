@@ -19,9 +19,8 @@ package apply_test
 import (
 	"testing"
 
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/apply"
+	"github.com/spf13/cobra"
 )
 
 func TestNewApplierFromResetArgs(t *testing.T) {

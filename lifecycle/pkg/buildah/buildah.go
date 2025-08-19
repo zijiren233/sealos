@@ -24,12 +24,11 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/unshare"
+	"github.com/labring/sealos/pkg/system"
+	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/labring/sealos/pkg/system"
-	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 type globalFlags struct {

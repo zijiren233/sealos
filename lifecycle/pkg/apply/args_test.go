@@ -23,10 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/pflag"
-
 	"github.com/labring/sealos/pkg/apply"
 	"github.com/labring/sealos/pkg/constants"
+	"github.com/spf13/pflag"
 )
 
 func TestParseClusterFlagsCorrect(t *testing.T) {

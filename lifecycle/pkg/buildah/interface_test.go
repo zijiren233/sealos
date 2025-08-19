@@ -19,9 +19,8 @@ package buildah_test
 import (
 	"testing"
 
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/buildah"
+	"github.com/spf13/cobra"
 )
 
 func Test_realImpl_InspectImage(t *testing.T) {

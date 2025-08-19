@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	v2 "github.com/labring/sealos/pkg/types/v1beta1"
+	"github.com/labring/sealos/pkg/utils/logger"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -34,9 +36,6 @@ import (
 	kubeadmv1beta4 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta4"
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config/v1beta1"
 	proxyconfig "k8s.io/kubernetes/pkg/proxy/apis/config/v1alpha1"
-
-	v2 "github.com/labring/sealos/pkg/types/v1beta1"
-	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 const (

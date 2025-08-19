@@ -23,9 +23,8 @@ import (
 	"path"
 	"strings"
 
-	utilnet "k8s.io/utils/net"
-
 	"github.com/labring/sealos/pkg/utils/logger"
+	utilnet "k8s.io/utils/net"
 )
 
 var (

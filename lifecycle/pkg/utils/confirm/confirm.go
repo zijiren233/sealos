@@ -18,9 +18,8 @@ import (
 	"errors"
 	"os"
 
-	"github.com/manifoldco/promptui"
-
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/manifoldco/promptui"
 )
 
 // Confirm is send the prompt and get result

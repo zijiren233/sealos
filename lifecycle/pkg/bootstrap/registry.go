@@ -17,13 +17,12 @@ package bootstrap
 import (
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/registry/helpers"
 	"github.com/labring/sealos/pkg/registry/password"
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type registryApplier struct {

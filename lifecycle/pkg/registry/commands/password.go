@@ -19,10 +19,9 @@ package commands
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/registry/password"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/spf13/cobra"
 )
 
 func NewRegistryPasswdCmd() *cobra.Command {

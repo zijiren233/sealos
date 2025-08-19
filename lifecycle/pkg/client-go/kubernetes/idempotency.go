@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/labring/sealos/pkg/utils/logger"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
@@ -31,8 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-
-	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 const (

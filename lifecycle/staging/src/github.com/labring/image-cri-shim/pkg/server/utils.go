@@ -20,9 +20,8 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/registry"
-	"github.com/labring/sreg/pkg/registry/crane"
-
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/labring/sreg/pkg/registry/crane"
 )
 
 // ListImages gets all images currently on the machine.

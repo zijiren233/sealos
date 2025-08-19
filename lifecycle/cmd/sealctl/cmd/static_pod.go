@@ -20,15 +20,14 @@ import (
 	"os"
 	"path"
 
-	"github.com/spf13/cobra"
-	v1 "k8s.io/api/core/v1"
-
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/ipvs"
 	"github.com/labring/sealos/pkg/types/v1beta1"
 	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/yaml"
+	"github.com/spf13/cobra"
+	v1 "k8s.io/api/core/v1"
 )
 
 var staticPodPath string

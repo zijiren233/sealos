@@ -22,10 +22,9 @@ import (
 	"strings"
 	"text/template"
 
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
-
 	"github.com/labring/sealos/pkg/types/v1beta1"
 	"github.com/labring/sealos/pkg/utils/maps"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 func EscapeDollarSign(s string, cmd bool) string {

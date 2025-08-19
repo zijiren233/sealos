@@ -18,12 +18,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/labring/sealos/pkg/buildah"
+	"github.com/labring/sealos/pkg/utils/logger"
 	sreglog "github.com/labring/sreg/pkg/utils/logger"
 	"github.com/spf13/cobra"
 	"k8s.io/kubectl/pkg/util/templates"
-
-	"github.com/labring/sealos/pkg/buildah"
-	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 var debug bool

@@ -28,12 +28,11 @@ import (
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/unshare"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-
 	"github.com/labring/sealos/pkg/system"
 	wrapunshare "github.com/labring/sealos/pkg/unshare"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // configuration, including customizations made in containers.conf

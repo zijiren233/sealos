@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/apply/processor"
 	"github.com/labring/sealos/pkg/clusterfile"
 	"github.com/labring/sealos/pkg/constants"
@@ -27,6 +25,7 @@ import (
 	"github.com/labring/sealos/pkg/runtime/factory"
 	fileutils "github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/spf13/cobra"
 )
 
 func newCertCmd() *cobra.Command {

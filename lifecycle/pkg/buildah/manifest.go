@@ -36,12 +36,11 @@ import (
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	"github.com/hashicorp/go-multierror"
+	"github.com/labring/sealos/pkg/utils/logger"
 	digest "github.com/opencontainers/go-digest"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 type manifestCreateOpts struct {

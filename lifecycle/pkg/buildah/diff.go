@@ -25,10 +25,9 @@ import (
 
 	"github.com/containers/common/libimage"
 	"github.com/containers/storage/pkg/archive"
+	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 func parseDiffType(v string) (DiffType, error) {

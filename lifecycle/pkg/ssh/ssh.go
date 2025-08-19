@@ -18,13 +18,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/spf13/pflag"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/sync/errgroup"
-
 	v2 "github.com/labring/sealos/pkg/types/v1beta1"
 	fileutils "github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/spf13/pflag"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/sync/errgroup"
 )
 
 var (

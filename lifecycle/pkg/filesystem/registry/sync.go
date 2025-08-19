@@ -25,10 +25,6 @@ import (
 
 	"github.com/containers/image/v5/copy"
 	"github.com/containers/image/v5/types"
-	"github.com/labring/sreg/pkg/registry/handler"
-	"github.com/labring/sreg/pkg/registry/sync"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/exec"
 	"github.com/labring/sealos/pkg/filesystem"
@@ -37,6 +33,9 @@ import (
 	"github.com/labring/sealos/pkg/utils/file"
 	httputils "github.com/labring/sealos/pkg/utils/http"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/labring/sreg/pkg/registry/handler"
+	"github.com/labring/sreg/pkg/registry/sync"
+	"golang.org/x/sync/errgroup"
 )
 
 const (

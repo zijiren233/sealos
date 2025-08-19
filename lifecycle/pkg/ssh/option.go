@@ -20,10 +20,9 @@ import (
 	"time"
 
 	"github.com/containers/storage/pkg/homedir"
+	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh"
-
-	"github.com/labring/sealos/pkg/utils/file"
 )
 
 type Option struct {

@@ -18,8 +18,6 @@ import (
 	"context"
 	"strings"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/labring/sealos/fork/golang/expansion"
 	"github.com/labring/sealos/pkg/env"
 	"github.com/labring/sealos/pkg/exec"
@@ -27,6 +25,7 @@ import (
 	v2 "github.com/labring/sealos/pkg/types/v1beta1"
 	"github.com/labring/sealos/pkg/utils/maps"
 	stringsutil "github.com/labring/sealos/pkg/utils/strings"
+	"golang.org/x/sync/errgroup"
 )
 
 type Interface interface {

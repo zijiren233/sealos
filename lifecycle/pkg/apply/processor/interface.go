@@ -22,7 +22,6 @@ import (
 	"slices"
 
 	"github.com/containers/storage"
-
 	"github.com/labring/sealos/pkg/buildah"
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/exec"

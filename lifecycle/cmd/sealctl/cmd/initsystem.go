@@ -20,9 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/utils/initsystem"
+	"github.com/spf13/cobra"
 )
 
 var initsystemInterface initsystem.InitSystem

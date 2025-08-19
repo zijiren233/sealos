@@ -20,11 +20,10 @@ import (
 	"slices"
 
 	"github.com/Masterminds/semver/v3"
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/maps"
 	stringsutil "github.com/labring/sealos/pkg/utils/strings"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 func (c *Cluster) GetMasterIPList() []string {

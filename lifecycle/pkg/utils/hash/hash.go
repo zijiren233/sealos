@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 
 	"github.com/davecgh/go-spew/spew"
-
 	"github.com/labring/sealos/pkg/utils/logger"
 )
 

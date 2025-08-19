@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/labring/sealos/pkg/bootstrap"
 	"github.com/labring/sealos/pkg/buildah"
 	"github.com/labring/sealos/pkg/clusterfile"
@@ -30,6 +28,7 @@ import (
 	fileutil "github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/strings"
+	"golang.org/x/sync/errgroup"
 )
 
 var ForceDelete bool

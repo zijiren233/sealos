@@ -17,10 +17,9 @@ package cmd
 import (
 	"errors"
 
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/apply"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/spf13/cobra"
 )
 
 const exampleAdd = `

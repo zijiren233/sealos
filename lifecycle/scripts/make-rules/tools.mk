@@ -30,10 +30,6 @@ tools.verify.%:
 install.golangci-lint:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(TOOLS_DIR) v2.3.1
 
-.PHONY: install.goimports
-install.goimports:
-	@$(GO) install golang.org/x/tools/cmd/goimports@latest
-
 .PHONY: install.addlicense
 install.addlicense:
 	@$(GO) install github.com/google/addlicense@latest

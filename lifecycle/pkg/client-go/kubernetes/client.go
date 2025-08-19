@@ -17,14 +17,13 @@ package kubernetes
 import (
 	"path/filepath"
 
+	fileutil "github.com/labring/sealos/pkg/utils/file"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
-
-	fileutil "github.com/labring/sealos/pkg/utils/file"
 )
 
 type Client interface {

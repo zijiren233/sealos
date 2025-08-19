@@ -26,11 +26,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/json"
-	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
-
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/runtime/kubernetes/types"
 	fileutil "github.com/labring/sealos/pkg/utils/file"
@@ -39,6 +34,10 @@ import (
 	"github.com/labring/sealos/pkg/utils/rand"
 	stringsutil "github.com/labring/sealos/pkg/utils/strings"
 	"github.com/labring/sealos/pkg/utils/yaml"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
 var (

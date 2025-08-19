@@ -22,10 +22,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/labring/sealos/pkg/utils/logger"
 	"k8s.io/apimachinery/pkg/util/sets"
 	netutils "k8s.io/utils/net"
-
-	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 // use only one

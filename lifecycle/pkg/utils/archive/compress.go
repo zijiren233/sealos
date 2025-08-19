@@ -26,10 +26,9 @@ import (
 	"strings"
 	"syscall"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
+	"golang.org/x/sys/unix"
 )
 
 const compressionBufSize = 32768

@@ -26,11 +26,10 @@ import (
 	"time"
 
 	dockertype "github.com/docker/docker/api/types/registry"
-	"google.golang.org/grpc"
-	k8sv1api "k8s.io/cri-api/pkg/apis/runtime/v1"
-
 	"github.com/labring/sealos/pkg/utils/logger"
 	netutil "github.com/labring/sealos/pkg/utils/net"
+	"google.golang.org/grpc"
+	k8sv1api "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 type Options struct {

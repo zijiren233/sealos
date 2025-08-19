@@ -17,9 +17,8 @@ limitations under the License.
 package toml
 
 import (
-	"github.com/pelletier/go-toml"
-
 	fileutil "github.com/labring/sealos/pkg/utils/file"
+	"github.com/pelletier/go-toml"
 )
 
 func MarshalFile(file string, obj any) error {

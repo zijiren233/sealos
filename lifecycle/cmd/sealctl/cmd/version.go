@@ -18,9 +18,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/spf13/cobra"
-
 	"github.com/labring/sealos/pkg/version"
+	"github.com/spf13/cobra"
 )
 
 var shortPrint bool
