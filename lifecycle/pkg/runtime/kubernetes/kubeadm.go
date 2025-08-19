@@ -171,7 +171,10 @@ func (k *KubeadmRuntime) getAPIServerDomain() string {
 }
 
 func (k *KubeadmRuntime) getClusterAPIServer() string {
-	return fmt.Sprintf("https://%s", net.JoinHostPort(k.getAPIServerDomain(), strconv.Itoa(int(k.getAPIServerPort()))))
+	return "https://" + net.JoinHostPort(
+		k.getAPIServerDomain(),
+		strconv.Itoa(int(k.getAPIServerPort())),
+	)
 }
 
 func (k *KubeadmRuntime) getCertSANs() []string {

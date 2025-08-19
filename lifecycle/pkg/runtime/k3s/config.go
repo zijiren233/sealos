@@ -163,12 +163,12 @@ func (k *K3s) overrideAgentConfig(c *Config) *Config {
 	return c
 }
 
-func (k *K3s) getInitConfig(callbacks ...callback) (*Config, error) {
+func (k *K3s) getInitConfig(callbacks ...callback) *Config {
 	cfg := &Config{}
 	for i := range callbacks {
 		cfg = callbacks[i](cfg)
 	}
-	return cfg, nil
+	return cfg
 }
 
 // ParseConfig return nil if data structure is not matched

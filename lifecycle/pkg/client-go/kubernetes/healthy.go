@@ -99,7 +99,7 @@ func (w *kubeHealthy) ForHealthyKubelet(initialTimeout time.Duration, host strin
 		trans := netutil.SetOldTransportDefaults(&http.Transport{})
 		client := &http.Client{Transport: trans}
 		hostPort := net.JoinHostPort(host, strconv.Itoa(KubeletHealthzPort))
-		baseURL := fmt.Sprintf("http://%s", hostPort)
+		baseURL := "http://" + hostPort
 		healthzEndpoint, _ := url.JoinPath(
 			baseURL,
 			"healthz",

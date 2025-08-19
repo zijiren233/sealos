@@ -52,7 +52,7 @@ func (k *K3s) initMaster0() error {
 }
 
 func (k *K3s) joinMasters(masters []string) error {
-	_, err := k.writeJoinConfigWithCallbacks(serverMode)
+	err := k.writeJoinConfigWithCallbacks(serverMode)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (k *K3s) joinMasters(masters []string) error {
 	return nil
 }
 
-func (k *K3s) writeJoinConfigWithCallbacks(runMode string, callbacks ...callback) (string, error) {
+func (k *K3s) writeJoinConfigWithCallbacks(runMode string, callbacks ...callback) error {
 	defaultCallbacks := []callback{defaultingConfig, k.merge, k.sealosCfg, k.overrideCertSans}
 	switch runMode {
 	case serverMode:
@@ -86,7 +86,7 @@ func (k *K3s) writeJoinConfigWithCallbacks(runMode string, callbacks ...callback
 		append(defaultCallbacks, callbacks...)...,
 	)
 	if err != nil {
-		return "", err
+		return err
 	}
 	var filename string
 	switch runMode {
@@ -96,7 +96,7 @@ func (k *K3s) writeJoinConfigWithCallbacks(runMode string, callbacks ...callback
 		filename = defaultJoinNodesFilename
 	}
 	path := filepath.Join(k.pathResolver.EtcPath(), filename)
-	return path, file.WriteFile(path, raw)
+	return file.WriteFile(path, raw)
 }
 
 func (k *K3s) joinMaster(master string) error {
@@ -125,7 +125,7 @@ func (k *K3s) joinMaster(master string) error {
 }
 
 func (k *K3s) joinNodes(nodes []string) error {
-	if _, err := k.writeJoinConfigWithCallbacks(agentMode, removeServerFlagsInAgentConfig); err != nil {
+	if err := k.writeJoinConfigWithCallbacks(agentMode, removeServerFlagsInAgentConfig); err != nil {
 		return err
 	}
 	for i := range nodes {
@@ -212,10 +212,7 @@ func (k *K3s) generateAndSendTokenFiles(host string, filenames ...string) error 
 }
 
 func (k *K3s) getRawInitConfig(callbacks ...callback) ([]byte, error) {
-	cfg, err := k.getInitConfig(callbacks...)
-	if err != nil {
-		return nil, err
-	}
+	cfg := k.getInitConfig(callbacks...)
 	return yaml.MarshalConfigs(cfg)
 }
 

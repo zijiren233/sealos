@@ -92,6 +92,7 @@ func (c *Client) newClientAndSftpClient(host string) (*ssh.Client, *sftp.Client,
 	return sshClient, sftpClient, err
 }
 
+//nolint:unparam
 func (c *Client) sftpConnect(
 	host string,
 ) (sshClient *ssh.Client, sftpClient *sftp.Client, err error) {
@@ -140,7 +141,7 @@ func (c *Client) Copy(host, localPath, remotePath string) error {
 		_ = bar.Close()
 	}()
 
-	return c.doCopy(sftpClient, host, localPath, remotePath, bar)
+	return c.doCopy(sftpClient, localPath, remotePath, bar)
 }
 
 func (c *Client) Fetch(host, src, dst string) error {
@@ -179,7 +180,7 @@ func (c *Client) Fetch(host, src, dst string) error {
 
 func (c *Client) doCopy(
 	client *sftp.Client,
-	host, src, dest string,
+	src, dest string,
 	epu *progressbar.ProgressBar,
 ) error {
 	lfp, err := os.Stat(src)
@@ -195,7 +196,7 @@ func (c *Client) doCopy(
 			return fmt.Errorf("failed to Mkdir remote: %w", err)
 		}
 		for _, entry := range entries {
-			if err = c.doCopy(client, host, path.Join(src, entry.Name()), path.Join(dest, entry.Name()), epu); err != nil {
+			if err = c.doCopy(client, path.Join(src, entry.Name()), path.Join(dest, entry.Name()), epu); err != nil {
 				return err
 			}
 		}

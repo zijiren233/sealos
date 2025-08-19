@@ -93,11 +93,10 @@ func changesToJSON(out io.Writer, diffs []archive.Change) error {
 	return enc.Encode(body)
 }
 
-func changesToTable(out io.Writer, diffs []archive.Change) error {
+func changesToTable(out io.Writer, diffs []archive.Change) {
 	for _, row := range diffs {
 		fmt.Fprintln(out, row.String())
 	}
-	return nil
 }
 
 type patchOption struct {
@@ -256,7 +255,8 @@ func runDiff(c *cobra.Command, args []string, opts *diffOption) error {
 		case "json":
 			return changesToJSON(os.Stdout, diffs)
 		case "table":
-			return changesToTable(os.Stdout, diffs)
+			changesToTable(os.Stdout, diffs)
+			return nil
 		default:
 			return fmt.Errorf("unknown output format %s", opts.output)
 		}

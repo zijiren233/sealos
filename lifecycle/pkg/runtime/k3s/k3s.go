@@ -116,10 +116,7 @@ func (k *K3s) GetRawConfig() ([]byte, error) {
 		k.overrideServerConfig,
 		setClusterInit,
 	}
-	cfg, err := k.getInitConfig(defaultCallbacks...)
-	if err != nil {
-		return nil, err
-	}
+	cfg := k.getInitConfig(defaultCallbacks...)
 	cluster := k.cluster.DeepCopy()
 	cluster.Status = v2.ClusterStatus{}
 	return yaml.MarshalConfigs(cluster, cfg)
