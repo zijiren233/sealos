@@ -169,10 +169,10 @@ func setDefaultSystemContext(sc *types.SystemContext) {
 	sc.DockerDaemonInsecureSkipTLSVerify = true
 }
 
-func bailOnError(err error, format string, a ...any) { //nolint: golint,goprintffuncname
+func bailOnError(err error, message string) {
 	if err != nil {
-		if format != "" {
-			logger.Error("%s: %v", fmt.Sprintf(format, a...), err)
+		if message != "" {
+			logger.Error("%s: %v", message, err)
 		} else {
 			logger.Error("%v", err)
 		}
