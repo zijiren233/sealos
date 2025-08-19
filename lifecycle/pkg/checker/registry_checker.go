@@ -22,6 +22,9 @@ import (
 	"os"
 
 	"github.com/docker/docker/api/types/registry"
+	"github.com/labring/sreg/pkg/registry/crane"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/exec"
 	"github.com/labring/sealos/pkg/registry/helpers"
@@ -32,8 +35,6 @@ import (
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/yaml"
-	"github.com/labring/sreg/pkg/registry/crane"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type RegistryChecker struct{}

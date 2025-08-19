@@ -16,9 +16,10 @@ package cmd
 
 import (
 	"github.com/labring/lvscare/care"
+	"github.com/spf13/cobra"
+
 	"github.com/labring/sealos/pkg/utils/flags"
 	"github.com/labring/sealos/pkg/utils/logger"
-	"github.com/spf13/cobra"
 )
 
 // careCmd represents the care command

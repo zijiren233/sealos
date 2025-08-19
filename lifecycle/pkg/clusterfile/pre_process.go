@@ -18,6 +18,9 @@ import (
 	"bytes"
 	"errors"
 
+	"helm.sh/helm/v3/pkg/cli/values"
+	"helm.sh/helm/v3/pkg/getter"
+
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/runtime/decode"
 	"github.com/labring/sealos/pkg/runtime/k3s"
@@ -26,8 +29,6 @@ import (
 	v2 "github.com/labring/sealos/pkg/types/v1beta1"
 	fileutil "github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
-	"helm.sh/helm/v3/pkg/cli/values"
-	"helm.sh/helm/v3/pkg/getter"
 )
 
 var ErrClusterFileNotExists = errors.New("the cluster file is not exist")

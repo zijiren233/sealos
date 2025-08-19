@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/labring/sealos/pkg/constants"
 	"github.com/spf13/pflag"
+
+	"github.com/labring/sealos/pkg/constants"
 )
 
 type Cluster struct {

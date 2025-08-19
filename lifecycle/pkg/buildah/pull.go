@@ -29,10 +29,11 @@ import (
 	"github.com/containers/common/pkg/auth"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
-	"github.com/labring/sealos/pkg/buildah/internal/util"
-	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/labring/sealos/pkg/buildah/internal/util"
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 type pullOptions struct {

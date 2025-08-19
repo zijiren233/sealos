@@ -22,6 +22,9 @@ import (
 	"path"
 	"strings"
 
+	"github.com/modood/table"
+	"github.com/spf13/pflag"
+
 	"github.com/labring/sealos/pkg/clusterfile"
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/exec"
@@ -31,8 +34,6 @@ import (
 	"github.com/labring/sealos/pkg/utils/confirm"
 	fileutil "github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
-	"github.com/modood/table"
-	"github.com/spf13/pflag"
 )
 
 type RegistryPasswdResults struct {

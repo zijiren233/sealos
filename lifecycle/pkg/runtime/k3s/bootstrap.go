@@ -22,14 +22,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/rand"
 	"github.com/labring/sealos/pkg/utils/yaml"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 func (k *K3s) initMaster0() error {

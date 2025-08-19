@@ -24,17 +24,18 @@ import (
 	"github.com/containers/buildah"
 	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/storage/pkg/unshare"
+	"github.com/labring/sreg/pkg/utils/file"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/labring/sealos/fork/golang/expansion"
 	"github.com/labring/sealos/pkg/guest"
 	v2 "github.com/labring/sealos/pkg/types/v1beta1"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/maps"
 	stringsutil "github.com/labring/sealos/pkg/utils/strings"
-	"github.com/labring/sreg/pkg/utils/file"
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"golang.org/x/sync/errgroup"
 )
 
 type createOptions struct {

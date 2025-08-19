@@ -20,6 +20,9 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"github.com/labring/sealos/pkg/buildah"
 	"github.com/labring/sealos/pkg/clusterfile"
 	"github.com/labring/sealos/pkg/config"
@@ -33,8 +36,6 @@ import (
 	"github.com/labring/sealos/pkg/utils/maps"
 	"github.com/labring/sealos/pkg/utils/rand"
 	stringsutil "github.com/labring/sealos/pkg/utils/strings"
-	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 var ForceOverride bool

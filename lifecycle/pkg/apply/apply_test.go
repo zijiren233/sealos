@@ -20,9 +20,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/labring/sealos/pkg/apply"
 	"github.com/labring/sealos/pkg/apply/applydrivers"
-	"github.com/spf13/cobra"
 )
 
 func Test_NewApplierFromFile(t *testing.T) {

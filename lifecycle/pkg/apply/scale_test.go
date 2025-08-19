@@ -19,10 +19,11 @@ package apply_test
 import (
 	"testing"
 
-	"github.com/labring/sealos/pkg/apply"
-	v2 "github.com/labring/sealos/pkg/types/v1beta1"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/labring/sealos/pkg/apply"
+	v2 "github.com/labring/sealos/pkg/types/v1beta1"
 )
 
 func TestDelete(t *testing.T) {

@@ -24,11 +24,12 @@ import (
 
 	types2 "github.com/docker/docker/api/types/registry"
 	"github.com/labring/image-cri-shim/pkg/cri"
-	fileutil "github.com/labring/sealos/pkg/utils/file"
-	"github.com/labring/sealos/pkg/utils/logger"
 	registry2 "github.com/labring/sreg/pkg/registry/crane"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
+
+	fileutil "github.com/labring/sealos/pkg/utils/file"
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 const (

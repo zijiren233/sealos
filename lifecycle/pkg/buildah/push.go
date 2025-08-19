@@ -32,11 +32,12 @@ import (
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/storage"
-	iutil "github.com/labring/sealos/pkg/buildah/internal/util"
-	"github.com/labring/sealos/pkg/utils/logger"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	iutil "github.com/labring/sealos/pkg/buildah/internal/util"
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 type pushOptions struct {

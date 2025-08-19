@@ -19,13 +19,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/labring/sealos/pkg/utils/logger"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilsysctl "k8s.io/component-helpers/node/util/sysctl"
 	proxyipvs "k8s.io/kubernetes/pkg/proxy/ipvs"
 	utilipset "k8s.io/kubernetes/pkg/proxy/ipvs/ipset"
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
 	"k8s.io/utils/exec"
+
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 type iptablesImpl struct {

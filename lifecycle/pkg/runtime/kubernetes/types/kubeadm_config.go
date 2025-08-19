@@ -18,10 +18,6 @@ import (
 	"fmt"
 
 	"github.com/imdario/mergo"
-	"github.com/labring/sealos/pkg/runtime/decode"
-	"github.com/labring/sealos/pkg/utils/file"
-	"github.com/labring/sealos/pkg/utils/logger"
-	"github.com/labring/sealos/pkg/utils/maps"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
 	kubeproxyconfigv1alpha1 "k8s.io/kube-proxy/config/v1alpha1"
@@ -29,6 +25,11 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm" // internal version
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3"
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta4"
+
+	"github.com/labring/sealos/pkg/runtime/decode"
+	"github.com/labring/sealos/pkg/utils/file"
+	"github.com/labring/sealos/pkg/utils/logger"
+	"github.com/labring/sealos/pkg/utils/maps"
 )
 
 //nolint:all

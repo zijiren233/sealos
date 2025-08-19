@@ -22,10 +22,11 @@ import (
 	"strings"
 
 	"github.com/containers/storage/pkg/archive"
+	"github.com/opencontainers/go-digest"
+
 	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/flags"
 	"github.com/labring/sealos/pkg/utils/logger"
-	"github.com/opencontainers/go-digest"
 )
 
 type Archive interface {

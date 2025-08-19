@@ -22,10 +22,11 @@ import (
 	"syscall"
 	"time"
 
-	netutil "github.com/labring/sealos/pkg/utils/net"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+
+	netutil "github.com/labring/sealos/pkg/utils/net"
 )
 
 // DialNotifyFn is a function to call after a successful net.Dial[Timeout]().

@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/exec"
 	"github.com/labring/sealos/pkg/ssh"
@@ -30,7 +32,6 @@ import (
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
 	stringsutil "github.com/labring/sealos/pkg/utils/strings"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 func initCluster(clusterName string) *v2.Cluster {

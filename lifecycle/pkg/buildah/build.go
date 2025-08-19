@@ -24,8 +24,9 @@ import (
 	"github.com/containers/buildah/imagebuildah"
 	buildahcli "github.com/containers/buildah/pkg/cli"
 	"github.com/containers/buildah/util"
-	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/spf13/cobra"
+
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 func newBuildCommand() *cobra.Command {

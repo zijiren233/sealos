@@ -26,10 +26,11 @@ import (
 	"reflect"
 	"strings"
 
-	fileutil "github.com/labring/sealos/pkg/utils/file"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
+
+	fileutil "github.com/labring/sealos/pkg/utils/file"
 )
 
 const nonStructPointerErrorFmt = "must be a struct pointer, got %T"

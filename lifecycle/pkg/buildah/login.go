@@ -22,10 +22,11 @@ import (
 
 	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/common/pkg/auth"
-	fileutil "github.com/labring/sealos/pkg/utils/file"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"k8s.io/client-go/tools/clientcmd"
+
+	fileutil "github.com/labring/sealos/pkg/utils/file"
 )
 
 type loginReply struct {

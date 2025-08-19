@@ -17,9 +17,10 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/labring/sealos/pkg/checker"
 	"github.com/labring/sealos/pkg/clusterfile"
-	"github.com/spf13/cobra"
 )
 
 // newStatusCmd

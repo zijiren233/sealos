@@ -18,12 +18,13 @@ import (
 	"reflect"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
+
 	"github.com/labring/sealos/pkg/clusterfile"
 	"github.com/labring/sealos/pkg/runtime"
 	"github.com/labring/sealos/pkg/runtime/kubernetes/types"
 	v2 "github.com/labring/sealos/pkg/types/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
 func Test_NewClusterFile(t *testing.T) {

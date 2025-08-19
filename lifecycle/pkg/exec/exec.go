@@ -23,13 +23,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"github.com/labring/sealos/pkg/ssh"
 	"github.com/labring/sealos/pkg/unshare"
 	fileutil "github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
 	netutil "github.com/labring/sealos/pkg/utils/net"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type Interface ssh.Interface

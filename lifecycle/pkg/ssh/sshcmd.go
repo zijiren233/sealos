@@ -24,8 +24,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/labring/sealos/pkg/utils/logger"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 func (c *Client) Ping(host string) error {

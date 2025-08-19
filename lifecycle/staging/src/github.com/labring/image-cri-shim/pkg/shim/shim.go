@@ -22,8 +22,9 @@ import (
 
 	"github.com/labring/image-cri-shim/pkg/server"
 	"github.com/labring/image-cri-shim/pkg/types"
-	"github.com/labring/sealos/pkg/utils/logger"
 	"google.golang.org/grpc"
+
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 const (

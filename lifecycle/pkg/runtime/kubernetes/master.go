@@ -20,14 +20,15 @@ import (
 	"path"
 	"strings"
 
+	"github.com/labring/sreg/pkg/registry/crane"
+	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/util/json"
+
 	"github.com/labring/sealos/pkg/registry/helpers"
 	"github.com/labring/sealos/pkg/ssh"
 	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
 	str2 "github.com/labring/sealos/pkg/utils/strings"
-	"github.com/labring/sreg/pkg/registry/crane"
-	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/util/json"
 )
 
 func (k *KubeadmRuntime) InitMaster0() error {

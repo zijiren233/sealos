@@ -18,12 +18,13 @@ import (
 	"path"
 
 	"github.com/labring/image-cri-shim/pkg/types"
+	"k8s.io/apimachinery/pkg/util/yaml"
+
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/exec"
 	"github.com/labring/sealos/pkg/types/v1beta1"
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
-	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 const RegistryCustomConfig = "registry.yml"

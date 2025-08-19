@@ -19,10 +19,11 @@ import (
 	"fmt"
 	"slices"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/strings"
-	"golang.org/x/sync/errgroup"
 )
 
 func (k *K3s) resetNodes(nodes []string) error {

@@ -22,6 +22,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/spf13/cobra"
+
 	"github.com/labring/sealos/pkg/apply/applydrivers"
 	"github.com/labring/sealos/pkg/apply/processor"
 	"github.com/labring/sealos/pkg/clusterfile"
@@ -33,7 +35,6 @@ import (
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/maps"
 	stringsutil "github.com/labring/sealos/pkg/utils/strings"
-	"github.com/spf13/cobra"
 )
 
 type ClusterArgs struct {

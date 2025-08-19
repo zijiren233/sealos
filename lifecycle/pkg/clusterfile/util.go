@@ -20,12 +20,13 @@ import (
 	"os"
 	"strings"
 
+	k8sV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
+
 	"github.com/labring/sealos/pkg/constants"
 	"github.com/labring/sealos/pkg/runtime/decode"
 	v2 "github.com/labring/sealos/pkg/types/v1beta1"
 	yaml2 "github.com/labring/sealos/pkg/utils/yaml"
-	k8sV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 )
 
 var ErrClusterNotExist = errors.New("no cluster exist")

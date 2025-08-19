@@ -19,9 +19,10 @@ package apply_test
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/labring/sealos/pkg/apply"
 	"github.com/labring/sealos/pkg/buildah"
-	"github.com/spf13/cobra"
 )
 
 func TestNewClusterFromGenArgs(t *testing.T) {

@@ -18,10 +18,11 @@ import (
 	"fmt"
 	"os"
 
-	runtimeutils "github.com/labring/sealos/pkg/runtime/utils"
-	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/json"
+
+	runtimeutils "github.com/labring/sealos/pkg/runtime/utils"
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 func newTokenCmd() *cobra.Command {

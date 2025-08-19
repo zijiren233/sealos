@@ -27,11 +27,12 @@ import (
 	buildahcli "github.com/containers/buildah/pkg/cli"
 	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/buildah/util"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/spf13/cobra"
+
 	"github.com/labring/sealos/pkg/image"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/rand"
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/spf13/cobra"
 )
 
 func newMergeCommand() *cobra.Command {

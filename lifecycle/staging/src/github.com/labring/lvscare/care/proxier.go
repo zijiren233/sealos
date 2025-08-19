@@ -22,8 +22,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labring/sealos/pkg/utils/logger"
 	ipvs "k8s.io/kubernetes/pkg/proxy/ipvs/util"
+
+	"github.com/labring/sealos/pkg/utils/logger"
 )
 
 type Proxier interface {

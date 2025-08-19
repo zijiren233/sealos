@@ -19,10 +19,11 @@ import (
 	"fmt"
 	"path"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/labring/sealos/pkg/ssh"
 	"github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/logger"
-	"golang.org/x/sync/errgroup"
 )
 
 func (k *KubeadmRuntime) joinNodes(newNodesIPList []string) error {

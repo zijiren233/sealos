@@ -22,12 +22,13 @@ import (
 
 	"github.com/emirpasic/gods/sets/linkedhashset"
 	"github.com/imdario/mergo"
+	netutils "k8s.io/utils/net"
+
 	"github.com/labring/sealos/pkg/constants"
 	fileutils "github.com/labring/sealos/pkg/utils/file"
 	"github.com/labring/sealos/pkg/utils/iputils"
 	"github.com/labring/sealos/pkg/utils/logger"
 	"github.com/labring/sealos/pkg/utils/yaml"
-	netutils "k8s.io/utils/net"
 )
 
 var defaultMergeOpts = []func(*mergo.Config){
