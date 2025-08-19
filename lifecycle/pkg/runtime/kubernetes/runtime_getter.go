@@ -19,7 +19,9 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"net"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/labring/sealos/pkg/client-go/kubernetes"
@@ -77,7 +79,7 @@ func (k *KubeadmRuntime) getMaster0IPAndPort() string {
 
 func (k *KubeadmRuntime) getMaster0IPAPIServer() string {
 	master0 := k.getMaster0IP()
-	return fmt.Sprintf("https://%s:%d", master0, k.getAPIServerPort())
+	return "https://" + net.JoinHostPort(master0, strconv.Itoa(int(k.getAPIServerPort())))
 }
 
 func (k *KubeadmRuntime) execIPVS(ip string, masters []string) error {

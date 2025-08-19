@@ -21,8 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/labring/sealos/pkg/utils/logger"
@@ -96,9 +98,10 @@ func (w *kubeHealthy) ForHealthyKubelet(initialTimeout time.Duration, host strin
 	return tryRunCommand(func() error {
 		trans := netutil.SetOldTransportDefaults(&http.Transport{})
 		client := &http.Client{Transport: trans}
-
+		hostPort := net.JoinHostPort(host, strconv.Itoa(KubeletHealthzPort))
+		baseURL := fmt.Sprintf("http://%s", hostPort)
 		healthzEndpoint, _ := url.JoinPath(
-			fmt.Sprintf("http://%s:%d", host, KubeletHealthzPort),
+			baseURL,
 			"healthz",
 		)
 		resp, err := client.Get(healthzEndpoint)

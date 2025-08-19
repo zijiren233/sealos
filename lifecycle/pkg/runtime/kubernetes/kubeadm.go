@@ -18,8 +18,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"path"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -169,7 +171,7 @@ func (k *KubeadmRuntime) getAPIServerDomain() string {
 }
 
 func (k *KubeadmRuntime) getClusterAPIServer() string {
-	return fmt.Sprintf("https://%s:%d", k.getAPIServerDomain(), k.getAPIServerPort())
+	return fmt.Sprintf("https://%s", net.JoinHostPort(k.getAPIServerDomain(), strconv.Itoa(int(k.getAPIServerPort()))))
 }
 
 func (k *KubeadmRuntime) getCertSANs() []string {

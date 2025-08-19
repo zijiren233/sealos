@@ -17,7 +17,9 @@ package k3s
 import (
 	"context"
 	"fmt"
+	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/labring/sealos/pkg/constants"
@@ -73,10 +75,9 @@ func (k *K3s) writeJoinConfigWithCallbacks(runMode string, callbacks ...callback
 
 	defaultCallbacks = append(defaultCallbacks,
 		func(c *Config) *Config {
-			c.ServerURL = fmt.Sprintf(
-				"https://%s:%d",
+			c.ServerURL = "https://" + net.JoinHostPort(
 				constants.DefaultAPIServerDomain,
-				c.HTTPSPort,
+				strconv.Itoa(c.HTTPSPort),
 			)
 			return c
 		},
