@@ -88,7 +88,7 @@ var _ = Describe("E2E_sealos_apply_other_test", func() {
 				PodCIDR:     "",
 				ServiceCIDR: "100.56.0.0/16",
 				Images:      clusterfileConfig.Cluster.Spec.Image,
-				Etcd:        []string{fmt.Sprintf("http://%s", net.JoinHostPort(utils.GetLocalIpv4(), "2379"))},
+				Etcd:        []string{"http://" + net.JoinHostPort(utils.GetLocalIpv4(), "2379")},
 			}
 			fakeCheckInterface, err = checkers.NewFakeGroupClient("default", opts)
 			utils.CheckErr(err, fmt.Sprintf("failed to get cluster interface: %v", err))
