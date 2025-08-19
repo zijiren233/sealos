@@ -82,7 +82,7 @@ func GetFiles(path string) (paths []string, err error) {
 
 // ReadLines reads the contents from the file line by line.
 func ReadLines(fileName string) ([]string, error) {
-	var lines []string
+	lines := make([]string, 0)
 	if !IsExist(fileName) {
 		return nil, errors.New("no such file")
 	}

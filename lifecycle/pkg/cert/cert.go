@@ -205,8 +205,9 @@ func NewSignedCert(
 		return nil, errors.New("must specify at least one ExtKeyUsage")
 	}
 
-	var dnsNames []string
-	var ips []net.IP
+	dnsNames := make([]string, 0)
+
+	ips := make([]net.IP, 0)
 
 	for _, v := range cfg.AltNames.DNSNames {
 		dnsNames = append(dnsNames, v)

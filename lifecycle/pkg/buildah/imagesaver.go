@@ -125,7 +125,7 @@ func parsePlatforms(c *cobra.Command) ([]v1.Platform, error) {
 		return []v1.Platform{platform}, nil
 	}
 
-	var ret []v1.Platform
+	ret := make([]v1.Platform, 0)
 	for _, pf := range parsedPlatforms {
 		ret = append(ret, v1.Platform{Architecture: pf.Arch, OS: pf.OS, Variant: pf.Variant})
 	}

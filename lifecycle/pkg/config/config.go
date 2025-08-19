@@ -121,7 +121,7 @@ func (c *Dumper) WriteFiles() (err error) {
 }
 
 func GetAppendOrInsertConfigData(path string, data []byte, insert bool) ([]byte, error) {
-	var configs [][]byte
+	configs := make([][]byte, 0, 2)
 	context, err := os.ReadFile(filepath.Clean(path))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -138,8 +138,9 @@ func GetAppendOrInsertConfigData(path string, data []byte, insert bool) ([]byte,
 
 // GetMergeConfigData merge the contents of data into the path file
 func GetMergeConfigData(path string, data []byte) ([]byte, error) {
-	var configs [][]byte
 	context, err := os.ReadFile(filepath.Clean(path))
+	bts := bytes.Split(context, []byte("---\n"))
+	configs := make([][]byte, 0, len(bts))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
@@ -148,7 +149,7 @@ func GetMergeConfigData(path string, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal merge map: %w", err)
 	}
-	for _, rawCfgData := range bytes.Split(context, []byte("---\n")) {
+	for _, rawCfgData := range bts {
 		configMap := make(map[string]any)
 		err = yaml.Unmarshal(rawCfgData, &configMap)
 		if err != nil {

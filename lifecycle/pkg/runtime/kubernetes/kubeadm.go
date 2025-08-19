@@ -215,7 +215,6 @@ func (k *KubeadmRuntime) mergeWithBuiltinKubeadmConfig() error {
 	}
 	logger.Debug("current cluster config data: %+v", obj)
 
-	var certs []string
 	certsStruct, exist, err := unstructured.NestedSlice(obj, "apiServer", "certSANs")
 	if !exist {
 		if err != nil {
@@ -223,6 +222,7 @@ func (k *KubeadmRuntime) mergeWithBuiltinKubeadmConfig() error {
 		}
 		return errors.New("apiServer certSANs not exist")
 	}
+	certs := make([]string, 0, len(certsStruct))
 	for i := range certsStruct {
 		//nolint:errcheck
 		certs = append(certs, certsStruct[i].(string))

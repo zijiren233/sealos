@@ -65,7 +65,7 @@ func GetDiffHosts(hostsOld, hostsNew []string) (add, sub []string) {
 }
 
 func GetHostIPs(hosts []string) []string {
-	var ips []string
+	ips := make([]string, 0, len(hosts))
 	for _, name := range hosts {
 		ips = append(ips, GetHostIP(name))
 	}

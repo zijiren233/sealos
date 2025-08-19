@@ -127,7 +127,7 @@ func UnmarshalFile(file string, obj any) error {
 }
 
 func MarshalConfigs(configs ...any) ([]byte, error) {
-	var cfgs [][]byte
+	cfgs := make([][]byte, len(configs))
 	for _, cfg := range configs {
 		data, err := yaml.Marshal(cfg)
 		if err != nil {

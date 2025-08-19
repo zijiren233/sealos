@@ -104,7 +104,7 @@ func (r *Runtime) PullOrLoadImages(
 	if copyOpts.Writer == nil {
 		copyOpts.Writer = os.Stderr
 	}
-	var result []string
+	result := make([]string, 0)
 	for i := range args {
 		name := args[i]
 		tr, ref, err := parseTransportAndReference(imagestorage.Transport, name)

@@ -61,7 +61,8 @@ func unshareMount(store storage.Store, mounts []string) ([]string, func(), error
 	if len(mounts) == 0 {
 		return nil, nil, nil
 	}
-	var mountedContainers, env []string
+	mountedContainers := make([]string, 0)
+	env := make([]string, 0)
 	unmount := func() {
 		for _, mounted := range mountedContainers {
 			builder, err := openBuilder(getContext(), store, mounted)

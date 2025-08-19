@@ -282,7 +282,7 @@ func doPull(
 	if iopts.quiet {
 		options.ReportWriter = nil // Turns off logging output
 	}
-	var ids []string
+	ids := make([]string, 0)
 	for _, imageName := range imageNames {
 		id, err := buildah.Pull(getContext(), imageName, options)
 		if err != nil {

@@ -58,7 +58,7 @@ func (n *ClusterChecker) Check(cluster *v2.Cluster, phase string) error {
 		return err
 	}
 	healthyClient := kubernetes.NewKubeHealthy(c.Kubernetes(), 30*time.Second)
-	var NodeList []ClusterStatus
+	nodeList := make([]ClusterStatus, 0)
 	ctx := context.Background()
 	for _, node := range nodes.Items {
 		ip, _ := getNodeStatus(node)
@@ -95,10 +95,10 @@ func (n *ClusterChecker) Check(cluster *v2.Cluster, phase string) error {
 		} else {
 			cStatus.KubeletErr = Nil
 		}
-		NodeList = append(NodeList, cStatus)
+		nodeList = append(nodeList, cStatus)
 	}
 
-	return n.Output(NodeList)
+	return n.Output(nodeList)
 }
 
 func isControlPlaneNode(node corev1.Node) bool {

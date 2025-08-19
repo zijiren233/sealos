@@ -71,7 +71,7 @@ func FilterNonEmptyFromString(s, sep string) []string {
 
 // RemoveDuplicate removes duplicate entry in the list.
 func RemoveDuplicate(list []string) []string {
-	var result []string
+	result := make([]string, 0)
 	flagMap := map[string]struct{}{}
 	for _, v := range list {
 		if _, ok := flagMap[v]; !ok {

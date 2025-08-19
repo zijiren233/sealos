@@ -131,7 +131,7 @@ func VerifyAndSetNodes(cmd *cobra.Command, cluster *v2.Cluster, scaleArgs *Scale
 
 	defaultPort := defaultSSHPort(cluster.Spec.SSH.Port)
 
-	var hosts []v2.Host
+	hosts := make([]v2.Host, 0)
 	var hasMaster bool
 	// check duplicate
 	alreadyIn := sets.NewString()
@@ -288,7 +288,7 @@ func deleteNodes(cluster *v2.Cluster, scaleArgs *ScaleArgs) error {
 			}
 		}
 	}
-	var hosts []v2.Host
+	hosts := make([]v2.Host, 0)
 	for _, host := range cluster.Spec.Hosts {
 		if len(host.IPS) != 0 {
 			hosts = append(hosts, host)
@@ -312,7 +312,7 @@ func returnFilteredIPList(
 }
 
 func fillIPAndPort(ipList []string, defaultPort string) []string {
-	var ipAndPorts []string
+	ipAndPorts := make([]string, 0)
 	for _, ip := range ipList {
 		if ip == "" {
 			continue

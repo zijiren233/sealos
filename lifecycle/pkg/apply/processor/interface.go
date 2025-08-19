@@ -109,7 +109,7 @@ func OCIToImageMount(inspector imageInspector, mount *v2.MountImage) error {
 	mount.Env = maps.FromSlice(oci.OCIv1.Config.Env)
 	delete(mount.Env, "PATH")
 	// mount.Entrypoint
-	var entrypoint []string
+	entrypoint := make([]string, 0)
 	for _, cmd := range oci.OCIv1.Config.Entrypoint {
 		if cmd == "/bin/sh" || cmd == "-c" {
 			continue
@@ -120,7 +120,7 @@ func OCIToImageMount(inspector imageInspector, mount *v2.MountImage) error {
 
 	// mount.Cmd
 	cmds := oci.OCIv1.Config.Cmd
-	var newCMDs []string
+	newCMDs := make([]string, 0)
 	for _, cmd := range cmds {
 		if cmd == "/bin/sh" || cmd == "-c" {
 			continue

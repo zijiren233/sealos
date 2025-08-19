@@ -189,7 +189,7 @@ func (c *Client) handlePipe(host string, pipe io.Reader, out io.Writer, isStdout
 		)
 	}
 	w := io.MultiWriter(writers...)
-	var line []byte
+	line := make([]byte, 0)
 	for {
 		b, err := r.ReadByte()
 		if err != nil {

@@ -101,7 +101,7 @@ func processTokenList(data string) BootstrapTokens {
 			slice = append(slice, to)
 		}
 	}
-	var result []v1.BootstrapToken
+	result := make([]v1.BootstrapToken, 0, len(slice))
 	for _, token := range slice {
 		if token.Expires != nil {
 			t := time.Now().Unix()

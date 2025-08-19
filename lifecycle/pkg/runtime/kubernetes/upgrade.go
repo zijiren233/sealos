@@ -63,8 +63,9 @@ func (k *KubeadmRuntime) upgradeCluster(version string) error {
 		return err
 	}
 	// upgrade other control-planes and worker nodes
-	var upgradeNodes []string
-	for _, node := range append(k.getMasterIPAndPortList(), k.getNodeIPAndPortList()...) {
+	nds := append(k.getMasterIPAndPortList(), k.getNodeIPAndPortList()...)
+	upgradeNodes := make([]string, 0, len(nds))
+	for _, node := range nds {
 		if node == k.getMaster0IPAndPort() {
 			continue
 		}

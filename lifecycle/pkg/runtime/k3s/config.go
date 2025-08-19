@@ -133,7 +133,7 @@ func (k *K3s) sealosCfg(c *Config) *Config {
 	kubeProxy.Add(fmt.Sprintf("%s=%s", "ipvs-exclude-cidrs", vip+"/32"))
 	kubeProxy.Add(fmt.Sprintf("%s=%s", "proxy-mode", "ipvs"))
 
-	var allArgs []string
+	allArgs := make([]string, 0, len(kubeProxy.Values()))
 	for _, v := range kubeProxy.Values() {
 		//nolint:errcheck
 		allArgs = append(allArgs, v.(string))

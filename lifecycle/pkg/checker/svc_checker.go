@@ -66,10 +66,7 @@ func (n *SvcChecker) Check(cluster *v2.Cluster, phase string) error {
 		return err
 	}
 
-	var svcNamespaceStatusList []*SvcNamespaceStatus
-	if err != nil {
-		return err
-	}
+	svcNamespaceStatusList := make([]*SvcNamespaceStatus, 0)
 	for _, svcNamespace := range nsList.Items {
 		namespaceSVCList, err := n.client.Kubernetes().
 			CoreV1().
