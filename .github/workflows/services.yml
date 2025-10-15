@@ -244,6 +244,7 @@ jobs:
 
       - name: Expose git commit data
         uses: rlespinasse/git-commit-data-action@v1
+
       - name: Check if tag
         id: check_tag
         env:
@@ -253,23 +254,6 @@ jobs:
             echo "isTag=true" >> "$GITHUB_OUTPUT"
           else
             echo "isTag=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Prepare
-        id: prepare
-        env:
-          PUSH_IMAGE: ${{ inputs.push_image }}
-          IS_TAG: ${{ steps.check_tag.outputs.isTag }}
-          PUSH_IMAGE_TAG: ${{ inputs.push_image_tag }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          MODULE: ${{ matrix.module }}
-        run: |
-          bash scripts/resolve-tag-image.sh "$PUSH_IMAGE" "$IS_TAG" "$PUSH_IMAGE_TAG"
-          echo "old_docker_repo=ghcr.io/labring/sealos-$MODULE-service" >> $GITHUB_OUTPUT
-          echo "new_docker_repo=ghcr.io/$REPO_OWNER/sealos-$MODULE-service" >> $GITHUB_OUTPUT
-          echo "cluster_repo=ghcr.io/$REPO_OWNER/sealos-cloud-$MODULE-service" >> $GITHUB_OUTPUT
-
-          if [[ -n "${{ env.ALIYUN_REPO_PREFIX }}" ]]; then
-            echo "aliyun_cluster_repo=${{ env.ALIYUN_REPO_PREFIX }}/sealos-cloud-$MODULE-service" >> $GITHUB_OUTPUT
           fi
 
       - name: Install sealos
@@ -291,6 +275,24 @@ jobs:
           ALIYUN_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
         run: |
           sudo sealos login -u "$ALIYUN_USERNAME" -p "$ALIYUN_PASSWORD" --debug ${{ env.ALIYUN_REGISTRY }}
+
+      - name: Prepare
+        id: prepare
+        env:
+          PUSH_IMAGE: ${{ inputs.push_image }}
+          IS_TAG: ${{ steps.check_tag.outputs.isTag }}
+          PUSH_IMAGE_TAG: ${{ inputs.push_image_tag }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          MODULE: ${{ matrix.module }}
+        run: |
+          bash scripts/resolve-tag-image.sh "$PUSH_IMAGE" "$IS_TAG" "$PUSH_IMAGE_TAG"
+          echo "old_docker_repo=ghcr.io/labring/sealos-$MODULE-service" >> $GITHUB_OUTPUT
+          echo "new_docker_repo=ghcr.io/$REPO_OWNER/sealos-$MODULE-service" >> $GITHUB_OUTPUT
+          echo "cluster_repo=ghcr.io/$REPO_OWNER/sealos-cloud-$MODULE-service" >> $GITHUB_OUTPUT
+
+          if [[ -n "${{ env.ALIYUN_REPO_PREFIX }}" ]]; then
+            echo "aliyun_cluster_repo=${{ env.ALIYUN_REPO_PREFIX }}/sealos-cloud-$MODULE-service" >> $GITHUB_OUTPUT
+          fi
 
       - name: Mutate image tag in deploy files
         working-directory: service/${{ matrix.module }}/deploy

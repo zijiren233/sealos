@@ -249,6 +249,10 @@ jobs:
             echo "isTag=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install sealos
+        run: |
+          sudo bash ./.github/scripts/install.sh
+
       - name: Sealos login to ghcr.io
         # if push to master, then login to ghcr.io
         env:
@@ -287,9 +291,6 @@ jobs:
             echo "aliyun_latest_cluster_image=${{ env.ALIYUN_REPO_PREFIX }}/sealos-cloud-${MODULE_NAME}-controller:latest" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install sealos
-        run: |
-          sudo bash ./.github/scripts/install.sh
       - name: Mutate image tag in deploy files
         working-directory: controllers/${{ matrix.module.path }}/deploy
         env:

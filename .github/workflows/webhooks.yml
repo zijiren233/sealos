@@ -218,6 +218,27 @@ jobs:
           else
             echo "isTag=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Install sealos
+        run: |
+          sudo bash ./.github/scripts/install.sh
+
+      - name: Sealos login to ghcr.io
+        # if push to master, then login to ghcr.io
+        env:
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_PAT: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          sudo sealos login -u "${REPOSITORY_OWNER}" -p "${GH_PAT}" --debug ghcr.io
+
+      - name: Sealos login to Aliyun Registry
+        if: ${{ env.ALIYUN_REGISTRY }}
+        env:
+          ALIYUN_USERNAME: ${{ secrets.ALIYUN_USERNAME }}
+          ALIYUN_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
+        run: |
+          sudo sealos login -u "$ALIYUN_USERNAME" -p "$ALIYUN_PASSWORD" --debug ${{ env.ALIYUN_REGISTRY }}
+
       - name: Prepare
         id: prepare
         env:
@@ -240,9 +261,6 @@ jobs:
             echo "aliyun_latest_cluster_image=${{ env.ALIYUN_REPO_PREFIX }}/sealos-cloud-${MODULE_NAME}-webhook:latest" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install sealos
-        run: |
-          sudo bash ./.github/scripts/install.sh
       - name: Mutate image tag in deploy files
         working-directory: webhooks/${{ matrix.module }}/deploy
         env:
@@ -279,21 +297,6 @@ jobs:
             sudo sealos build -t "${ALIYUN_CLUSTER_IMAGE}-arm64" --platform linux/arm64 -f Kubefile
             sudo sealos build -t "${ALIYUN_LATEST_CLUSTER_IMAGE}-arm64" --platform linux/arm64 -f Kubefile
           fi
-      - name: Sealos login to ghcr.io
-        # if push to master, then login to ghcr.io
-        env:
-          REPOSITORY_OWNER: ${{ github.repository_owner }}
-          GH_PAT: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          sudo sealos login -u "${REPOSITORY_OWNER}" -p "${GH_PAT}" --debug ghcr.io
-
-      - name: Sealos login to Aliyun Registry
-        if: ${{ env.ALIYUN_REGISTRY }}
-        env:
-          ALIYUN_USERNAME: ${{ secrets.ALIYUN_USERNAME }}
-          ALIYUN_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
-        run: |
-          sudo sealos login -u "$ALIYUN_USERNAME" -p "$ALIYUN_PASSWORD" --debug ${{ env.ALIYUN_REGISTRY }}
 
       - name: Manifest Cluster Images
         # if push to master, then patch images to ghcr.io
