@@ -142,15 +142,6 @@ jobs:
           sed -i "s#labring#${REPOSITORY_OWNER}#g" init.sh
           sed -i "s#latest#${BuildFromTag}#g" init.sh
 
-          # Build cluster images for each tag (amd64)
-          for TAG in $DOCKER_METADATA_OUTPUT_TAGS; do
-            sudo rm -rf registry
-            sudo rm -rf tars
-            sudo bash init.sh amd64
-            echo "Building ${TAG}-amd64"
-            sudo sealos build -t "${TAG}-amd64" --platform linux/amd64 -f Kubefile
-          done
-
           # Build cluster images for each tag (arm64)
           for TAG in $DOCKER_METADATA_OUTPUT_TAGS; do
             sudo rm -rf registry
@@ -158,6 +149,15 @@ jobs:
             sudo bash init.sh arm64
             echo "Building ${TAG}-arm64"
             sudo sealos build -t "${TAG}-arm64" --platform linux/arm64 -f Kubefile
+          done
+
+          # Build cluster images for each tag (amd64)
+          for TAG in $DOCKER_METADATA_OUTPUT_TAGS; do
+            sudo rm -rf registry
+            sudo rm -rf tars
+            sudo bash init.sh amd64
+            echo "Building ${TAG}-amd64"
+            sudo sealos build -t "${TAG}-amd64" --platform linux/amd64 -f Kubefile
           done
 
       - name: Manifest Cluster Images
