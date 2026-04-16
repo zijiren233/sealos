@@ -1,6 +1,6 @@
 module github.com/labring/sealos/controllers/resources
 
-go 1.24.0
+go 1.25.0
 
 replace (
 	k8s.io/api => k8s.io/api v0.32.3
@@ -19,7 +19,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.64
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.36.1
-	golang.org/x/sync v0.8.0
+	golang.org/x/sync v0.17.0
 	k8s.io/api v0.32.1
 	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v12.0.0+incompatible
@@ -49,9 +49,9 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/pgx/v5 v5.5.4 // indirect
-	github.com/jackc/puddle/v2 v2.2.1 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.9.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
@@ -91,7 +91,7 @@ require (
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/term v0.25.0 // indirect
-	golang.org/x/text v0.19.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
