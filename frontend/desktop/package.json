@@ -85,7 +85,7 @@
     "sonner": "^2.0.5",
     "tailwindcss": "^4.1.12",
     "tencentcloud-sdk-nodejs": "4.0.905",
-    "uuid": "^9.0.1",
+    "uuid": "^14.0.0",
     "xml2js": "^0.6.2",
     "zod": "^3.23.8",
     "zustand": "^4.4.1"
