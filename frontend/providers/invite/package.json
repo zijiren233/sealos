@@ -35,7 +35,7 @@
     "lucide-react": "^0.503.0",
     "mongodb": "^5.9.0",
     "nanoid": "^4.0.2",
-    "next": "13.1.6",
+    "next": "15.5.18",
     "next-i18next": "^15.3.0",
     "nprogress": "^0.2.0",
     "prettier": "^2.8.8",
