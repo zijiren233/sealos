@@ -29,7 +29,7 @@
     "github-markdown-css": "^5.4.0",
     "i18next": "^23.5.1",
     "immer": "^10.0.3",
-    "js-cookie": "^3.0.5",
+    "js-cookie": "^3.0.7",
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
