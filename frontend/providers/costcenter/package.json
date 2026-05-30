@@ -29,7 +29,7 @@
     "@tanstack/react-query-persist-client": "^4.35.5",
     "@tanstack/react-table": "^8.10.7",
     "@zumer/snapdom": "^1.9.9",
-    "axios": "1.2.1",
+    "axios": "1.16.0",
     "date-fns": "^2.30.0",
     "echarts": "^5.4.3",
     "echarts-for-react": "^3.0.2",
