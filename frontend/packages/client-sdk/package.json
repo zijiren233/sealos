@@ -68,7 +68,7 @@
     "axios": "^1.5.1",
     "dayjs": "^1.11.10",
     "js-cookie": "^3.0.5",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.2.0",
     "uuid": "^9.0.1"
   },
   "peerDependencies": {
