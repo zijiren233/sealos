@@ -30,7 +30,7 @@
     "i18next": "^23.5.1",
     "immer": "^10.0.3",
     "js-cookie": "^3.0.5",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.2.0",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "mongodb": "^6.1.0",
