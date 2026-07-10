@@ -1,8 +1,6 @@
 module github.com/labring/sealos
 
-go 1.23
-
-toolchain go1.23.1
+go 1.25.0
 
 require (
 	github.com/BurntSushi/toml v1.3.2
@@ -15,7 +13,7 @@ require (
 	github.com/containers/ocicrypt v1.1.7
 	github.com/containers/storage v1.50.2
 	github.com/davecgh/go-spew v1.1.1
-	github.com/docker/docker v25.0.1+incompatible
+	github.com/docker/docker v25.0.6+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/emicklei/go-restful/v3 v3.11.0
 	github.com/emirpasic/gods v1.18.1
@@ -36,11 +34,11 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/zap v1.26.0
-	golang.org/x/crypto v0.25.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
-	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.22.0
-	golang.org/x/term v0.22.0
+	golang.org/x/sync v0.20.0
+	golang.org/x/sys v0.45.0
+	golang.org/x/term v0.43.0
 	google.golang.org/grpc v1.58.3
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v2 v2.4.0
@@ -245,12 +243,12 @@ require (
 	go.opentelemetry.io/proto/otlp v1.0.0 // indirect
 	go.starlark.net v0.0.0-20230525235612-a134d8f9ddca // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/oauth2 v0.10.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
