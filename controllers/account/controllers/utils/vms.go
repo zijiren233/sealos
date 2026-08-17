@@ -24,6 +24,22 @@ import (
 )
 
 func SendVms(phone, template, numberPollNo string, sendTime time.Time, forbidTimes []string) error {
+	return SendVmsWithOpenID(
+		phone,
+		template,
+		numberPollNo,
+		sendTime,
+		forbidTimes,
+		phone+"-"+sendTime.Format(time.DateOnly),
+	)
+}
+
+func SendVmsWithOpenID(
+	phone, template, numberPollNo string,
+	sendTime time.Time,
+	forbidTimes []string,
+	openID string,
+) error {
 	paramList := make([]*vms.SingleParam, 0, 1)
 	paramList = append(paramList, &vms.SingleParam{
 		Phone: phone,
@@ -33,7 +49,7 @@ func SendVms(phone, template, numberPollNo string, sendTime time.Time, forbidTim
 		TriggerTime:  &vms.JsonTime{Time: sendTime},
 		Resource:     template,
 		NumberPoolNo: numberPollNo,
-		SingleOpenId: phone + "-" + sendTime.Format(time.DateOnly),
+		SingleOpenId: openID,
 	})
 	if len(forbidTimes) != 0 {
 		paramList[0].ForbidTimeList = []*vms.ForbidTimeItem{

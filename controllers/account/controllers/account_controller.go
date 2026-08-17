@@ -610,6 +610,13 @@ func (r *AccountReconciler) BillingCVM() error {
 				return nil
 			},
 			func() error {
+				if saveErr := persistBalanceUsageBillings(
+					r.AccountV2,
+					user.UserUID,
+					[]*resources.Billing{billing},
+				); saveErr != nil {
+					return fmt.Errorf("persist CVM balance usage failed: %w", saveErr)
+				}
 				if saveErr := r.CVMDBClient.SetDoneStateInstance(cvmIDs...); saveErr != nil {
 					return fmt.Errorf("set done state instance failed: %w", saveErr)
 				}
@@ -618,6 +625,14 @@ func (r *AccountReconciler) BillingCVM() error {
 		)
 		if err != nil {
 			return fmt.Errorf("add balance failed: %w", err)
+		}
+		if err := enqueueBalanceAlertUsers(
+			r.AccountV2.GetGlobalDB(),
+			[]uuid.UUID{user.UserUID},
+			"cvm-billing",
+			time.Now().UTC(),
+		); err != nil {
+			return fmt.Errorf("enqueue CVM balance alert failed: %w", err)
 		}
 		fmt.Printf("billing cvm success %#+v\n", billing)
 	}

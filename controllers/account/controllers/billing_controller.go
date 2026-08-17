@@ -294,6 +294,9 @@ func (r *BillingReconciler) ExecuteBillingTaskAt(endHourTime time.Time) error {
 	); err != nil {
 		return fmt.Errorf("failed to reconcile owner list batch: %w", err)
 	}
+	if err := completeBalanceBillingHour(r.AccountV2, endHourTime); err != nil {
+		return fmt.Errorf("complete balance billing hour: %w", err)
+	}
 	r.Info(
 		"finish billing reconcile",
 		"billingTime", endHourTime.Format(time.RFC3339),
@@ -713,6 +716,13 @@ func (r *BillingReconciler) reconcileBilling(
 		amount += billing.Amount
 		orderIDs = append(orderIDs, billing.OrderID)
 	}
+	userUID, err := r.AccountV2.GetUserUID(&types.UserQueryOpts{Owner: owner})
+	if err != nil {
+		return fmt.Errorf("get owner %s user UID: %w", owner, err)
+	}
+	if err := persistBalanceUsageBillings(r.AccountV2, userUID, billings); err != nil {
+		return fmt.Errorf("persist owner %s balance usage: %w", owner, err)
+	}
 	if err := r.DBClient.SaveBillings(billings...); err != nil {
 		return fmt.Errorf("save billings failed: %w", err)
 	}
@@ -746,6 +756,13 @@ func (r *BillingReconciler) reconcileBillingWithCredits(
 		}
 		amount += billing.Amount
 		orderIDs = append(orderIDs, billing.OrderID)
+	}
+	userUID, err := r.AccountV2.GetUserUID(&types.UserQueryOpts{Owner: owner})
+	if err != nil {
+		return fmt.Errorf("get owner %s user UID: %w", owner, err)
+	}
+	if err := persistBalanceUsageBillings(r.AccountV2, userUID, billings); err != nil {
+		return fmt.Errorf("persist owner %s balance usage: %w", owner, err)
 	}
 	if err := r.DBClient.SaveBillings(billings...); err != nil {
 		return fmt.Errorf("save billings failed: %w", err)

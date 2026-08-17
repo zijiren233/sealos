@@ -257,7 +257,12 @@ func (r *PaymentReconciler) reconcilePayment(payment *accountv1.Payment) error {
 		if err := r.Status().Update(context.Background(), payment); err != nil {
 			return fmt.Errorf("update payment failed: %w", err)
 		}
-		go r.DebtReconciler.processUsersInParallel([]uuid.UUID{userUID})
+		if err := r.DebtReconciler.EnqueueBalanceAlertUsers(
+			[]uuid.UUID{userUID},
+			"payment",
+		); err != nil {
+			return err
+		}
 	// case pay.PaymentFailed, pay.PaymentExpired:
 	default:
 		if err := r.expiredOvertimePayment(payment); err != nil {
