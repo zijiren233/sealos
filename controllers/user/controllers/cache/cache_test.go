@@ -126,10 +126,17 @@ func TestTransformUserDropsOnlyLargeUnusedFields(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "user-a",
 			ResourceVersion: "42",
-			Annotations:     map[string]string{userv1.UserAnnotationOwnerKey: "owner-a"},
-			Labels:          map[string]string{"user.sealos.io/status": "active"},
-			Finalizers:      []string{"sealos.io/user.finalizers"},
-			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "test"}},
+			Annotations: map[string]string{
+				userv1.UserAnnotationOwnerKey: "owner-a",
+				"unused.example/annotation":   "unused",
+			},
+			Labels: map[string]string{
+				"user.sealos.io/status": "active",
+				"user.sealos.io/type":   "Group",
+				"unused.example/label":  "unused",
+			},
+			Finalizers:    []string{"sealos.io/user.finalizers"},
+			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
 		},
 		Spec: userv1.UserSpec{
 			CSRExpirationSeconds: 600,
@@ -162,9 +169,14 @@ func TestTransformUserDropsOnlyLargeUnusedFields(t *testing.T) {
 	if len(got.ManagedFields) != 0 {
 		t.Fatal("managed fields were retained")
 	}
+	wantAnnotations := map[string]string{userv1.UserAnnotationOwnerKey: "owner-a"}
+	wantLabels := map[string]string{
+		"user.sealos.io/status": "active",
+		"user.sealos.io/type":   "Group",
+	}
 	if got.Name != user.Name || got.ResourceVersion != user.ResourceVersion ||
-		!reflect.DeepEqual(got.Annotations, user.Annotations) ||
-		!reflect.DeepEqual(got.Labels, user.Labels) ||
+		!reflect.DeepEqual(got.Annotations, wantAnnotations) ||
+		!reflect.DeepEqual(got.Labels, wantLabels) ||
 		!reflect.DeepEqual(got.Finalizers, user.Finalizers) ||
 		!reflect.DeepEqual(got.Spec, user.Spec) {
 		t.Fatalf("required user fields were not retained: %#v", got)
@@ -176,6 +188,50 @@ func TestTransformUserDropsOnlyLargeUnusedFields(t *testing.T) {
 	}
 	if user.Status.KubeConfig == "" || len(user.ManagedFields) == 0 {
 		t.Fatal("transform mutated the source user")
+	}
+}
+
+func TestTransformMetadataKeepsOnlyEventFields(t *testing.T) {
+	metadata := &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "role-a",
+			Namespace:       "ns-a",
+			ResourceVersion: "42",
+			Annotations:     map[string]string{"unused.example/key": "unused"},
+			Labels:          map[string]string{"unused.example/key": "unused"},
+			Finalizers:      []string{"unused.example/finalizer"},
+			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "test"}},
+			OwnerReferences: []metav1.OwnerReference{{Name: "user-a"}},
+		},
+	}
+	metadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
+
+	transformed, err := transformOwnerMetadata(metadata)
+	if err != nil {
+		t.Fatalf("transform metadata: %v", err)
+	}
+	got, ok := transformed.(*metav1.PartialObjectMetadata)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *metav1.PartialObjectMetadata", transformed)
+	}
+	if got.GroupVersionKind() != metadata.GroupVersionKind() || got.Name != metadata.Name ||
+		got.Namespace != metadata.Namespace || got.ResourceVersion != metadata.ResourceVersion {
+		t.Fatalf("required event metadata was not retained: %#v", got)
+	}
+	if !reflect.DeepEqual(got.OwnerReferences, metadata.OwnerReferences) {
+		t.Fatalf("owner references = %#v, want %#v", got.OwnerReferences, metadata.OwnerReferences)
+	}
+	if len(got.Annotations) != 0 || len(got.Labels) != 0 || len(got.Finalizers) != 0 ||
+		len(got.ManagedFields) != 0 {
+		t.Fatalf("unused metadata was retained: %#v", got.ObjectMeta)
+	}
+
+	keyOnly, err := transformKeyMetadata(metadata)
+	if err != nil {
+		t.Fatalf("transform key metadata: %v", err)
+	}
+	if gotKey := keyOnly.(*metav1.PartialObjectMetadata); len(gotKey.OwnerReferences) != 0 {
+		t.Fatalf("key-only owner references were retained: %#v", gotKey.OwnerReferences)
 	}
 }
 

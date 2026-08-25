@@ -131,6 +131,15 @@ type ControllerRestartPredicate struct {
 	checkTime time.Time
 }
 
+type OwnerAnnotationChangedPredicate struct {
+	predicate.Funcs
+}
+
+func (OwnerAnnotationChangedPredicate) Update(e event.UpdateEvent) bool {
+	return e.ObjectOld.GetAnnotations()[userAnnotationOwnerKey] !=
+		e.ObjectNew.GetAnnotations()[userAnnotationOwnerKey]
+}
+
 func NewControllerRestartPredicate(duration time.Duration) *ControllerRestartPredicate {
 	return &ControllerRestartPredicate{
 		checkTime: time.Now().Add(-duration),
@@ -199,7 +208,7 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 			&userv1.User{},
 			builder.WithPredicates(predicate.Or(
 				predicate.GenerationChangedPredicate{},
-				predicate.AnnotationChangedPredicate{},
+				OwnerAnnotationChangedPredicate{},
 			)),
 		).
 		Watches(

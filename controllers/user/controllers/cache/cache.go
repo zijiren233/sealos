@@ -35,8 +35,14 @@ func Options(syncPeriod *time.Duration) ctrlcache.Options {
 		ReaderFailOnMissingInformer: true,
 		DefaultTransform:            ctrlcache.TransformStripManagedFields(),
 		ByObject: map[client.Object]ctrlcache.ByObject{
+			&licensev1.License{}: {
+				Transform: transformKeyMetadata,
+			},
 			&userv1.User{}: {
 				Transform: transformUser,
+			},
+			&userv1.DeleteRequest{}: {
+				Transform: transformKeyMetadata,
 			},
 			&corev1.Secret{}: {
 				Namespaces: map[string]ctrlcache.Config{
@@ -48,11 +54,19 @@ func Options(syncPeriod *time.Duration) ctrlcache.Options {
 				Namespaces: map[string]ctrlcache.Config{
 					config.GetUserSystemNamespace(): {},
 				},
+				Transform: transformOwnerMetadata,
 			},
 			&userv1.Operationrequest{}: {
 				Namespaces: map[string]ctrlcache.Config{
 					config.GetUserSystemNamespace(): {},
 				},
+				Transform: transformKeyMetadata,
+			},
+			&rbacv1.Role{}: {
+				Transform: transformOwnerMetadata,
+			},
+			&rbacv1.RoleBinding{}: {
+				Transform: transformOwnerMetadata,
 			},
 		},
 	}
@@ -79,10 +93,84 @@ func transformUser(obj any) (any, error) {
 		return obj, nil
 	}
 
-	projected := user.DeepCopy()
-	projected.ManagedFields = nil
-	projected.Status.KubeConfig = ""
-	return projected, nil
+	metadata := projectObjectMeta(user.ObjectMeta)
+	metadata.Finalizers = append([]string(nil), user.Finalizers...)
+	metadata.Annotations = copyMapValues(
+		user.Annotations,
+		userv1.UserAnnotationOwnerKey,
+	)
+	metadata.Labels = copyMapValues(
+		user.Labels,
+		"user.sealos.io/status",
+		"user.sealos.io/type",
+	)
+	status := *user.Status.DeepCopy()
+	status.KubeConfig = ""
+	return &userv1.User{
+		TypeMeta:   user.TypeMeta,
+		ObjectMeta: metadata,
+		Spec:       *user.Spec.DeepCopy(),
+		Status:     status,
+	}, nil
+}
+
+func transformKeyMetadata(obj any) (any, error) {
+	return transformMetadata(obj, false)
+}
+
+func transformOwnerMetadata(obj any) (any, error) {
+	return transformMetadata(obj, true)
+}
+
+func transformMetadata(obj any, keepOwnerReferences bool) (any, error) {
+	metadata, ok := obj.(*metav1.PartialObjectMetadata)
+	if !ok {
+		return obj, nil
+	}
+
+	projected := projectObjectMeta(metadata.ObjectMeta)
+	if keepOwnerReferences {
+		projected.OwnerReferences = append(
+			[]metav1.OwnerReference(nil),
+			metadata.OwnerReferences...,
+		)
+	}
+	return &metav1.PartialObjectMetadata{
+		TypeMeta:   metadata.TypeMeta,
+		ObjectMeta: projected,
+	}, nil
+}
+
+func projectObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
+	out := metav1.ObjectMeta{
+		Name:              in.Name,
+		Namespace:         in.Namespace,
+		UID:               in.UID,
+		ResourceVersion:   in.ResourceVersion,
+		Generation:        in.Generation,
+		CreationTimestamp: in.CreationTimestamp,
+	}
+	if in.DeletionTimestamp != nil {
+		out.DeletionTimestamp = in.DeletionTimestamp.DeepCopy()
+	}
+	if in.DeletionGracePeriodSeconds != nil {
+		gracePeriod := *in.DeletionGracePeriodSeconds
+		out.DeletionGracePeriodSeconds = &gracePeriod
+	}
+	return out
+}
+
+func copyMapValues(source map[string]string, keys ...string) map[string]string {
+	var result map[string]string
+	for _, key := range keys {
+		if value, ok := source[key]; ok {
+			if result == nil {
+				result = make(map[string]string)
+			}
+			result[key] = value
+		}
+	}
+	return result
 }
 
 func transformSecret(obj any) (any, error) {
@@ -91,16 +179,7 @@ func transformSecret(obj any) (any, error) {
 		return obj, nil
 	}
 
-	metadata := metav1.ObjectMeta{
-		Name:              secret.Name,
-		Namespace:         secret.Namespace,
-		UID:               secret.UID,
-		ResourceVersion:   secret.ResourceVersion,
-		CreationTimestamp: secret.CreationTimestamp,
-	}
-	if secret.DeletionTimestamp != nil {
-		metadata.DeletionTimestamp = secret.DeletionTimestamp.DeepCopy()
-	}
+	metadata := projectObjectMeta(secret.ObjectMeta)
 	if serviceAccountName, ok := secret.Annotations[corev1.ServiceAccountNameKey]; ok {
 		metadata.Annotations = map[string]string{
 			corev1.ServiceAccountNameKey: serviceAccountName,
