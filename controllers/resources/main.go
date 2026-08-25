@@ -31,11 +31,13 @@ import (
 	"github.com/labring/sealos/controllers/pkg/resources"
 	"github.com/labring/sealos/controllers/pkg/utils/env"
 	"github.com/labring/sealos/controllers/resources/controllers"
+	resourcecache "github.com/labring/sealos/controllers/resources/controllers/cache"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -82,6 +84,10 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
+		Cache:  resourcecache.Options(),
+		Client: client.Options{Cache: &client.CacheOptions{
+			DisableFor: resourcecache.UncachedObjects(),
+		}},
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
@@ -107,6 +113,10 @@ func main() {
 
 	setupLog.Info("starting manager")
 
+	if err = resourcecache.SetupInformers(mgr); err != nil {
+		setupLog.Error(err, "failed to set up resource cache informers")
+		os.Exit(1)
+	}
 	err = controllers.InitIndexField(mgr)
 	if err != nil {
 		setupLog.Error(err, "failed to init index field")
