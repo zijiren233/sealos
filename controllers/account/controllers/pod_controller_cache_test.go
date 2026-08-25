@@ -37,11 +37,15 @@ func TestPatchPodStatusPreservesUncachedFields(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"},
 		Spec: corev1.PodSpec{
 			SchedulerName: accountv1.DebtSchedulerName,
-			Containers:    []corev1.Container{{Name: "app", Image: "example/app:latest"}},
+			Containers: []corev1.Container{
+				{Name: "app", Image: "example/app:latest"},
+			},
 		},
 		Status: corev1.PodStatus{
-			Phase:      corev1.PodRunning,
-			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
 		},
 	}
 	cli := fake.NewClientBuilder().
