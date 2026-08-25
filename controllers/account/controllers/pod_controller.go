@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -36,6 +35,7 @@ import (
 // PodReconciler reconciles a Pod object
 type PodReconciler struct {
 	client.Client
+	CacheReader client.Reader
 	logr.Logger
 	Scheme *runtime.Scheme
 }
@@ -61,7 +61,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// Fetch the pod
 	pod := corev1.Pod{}
 
-	err := r.Get(ctx, req.NamespacedName, &pod)
+	reader := r.CacheReader
+	if reader == nil {
+		reader = r.Client
+	}
+	err := reader.Get(ctx, req.NamespacedName, &pod)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -76,23 +80,21 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if pod.Spec.SchedulerName != v1.DebtSchedulerName {
 		return reconcile.Result{}, nil
 	}
+	original := pod.DeepCopy()
 	pod.Status.Phase = v1.PodPhaseSuspended
 
 	// Update status after reconciliation.
-	if err = r.patchStatus(ctx, &pod); err != nil {
+	if err = r.patchStatus(ctx, &pod, original); err != nil {
 		return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *PodReconciler) patchStatus(ctx context.Context, pod *corev1.Pod) error {
-	key := client.ObjectKeyFromObject(pod)
-	latest := &corev1.Pod{}
-	if err := r.Get(ctx, key, latest); err != nil {
-		return err
-	}
-
-	return r.Client.Status().Patch(ctx, pod, client.MergeFrom(latest))
+func (r *PodReconciler) patchStatus(
+	ctx context.Context,
+	pod, original *corev1.Pod,
+) error {
+	return r.Client.Status().Patch(ctx, pod, client.MergeFrom(original))
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -101,9 +103,12 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if maxConcurrentReconciles == 0 {
 		maxConcurrentReconciles = 2
 	}
+	if r.CacheReader == nil {
+		r.CacheReader = mgr.GetCache()
+	}
 	r.Logger = ctrl.Log.WithName("controllers").WithName("Pod")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}, builder.OnlyMetadata).
+		For(&corev1.Pod{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: maxConcurrentReconciles}).
 		Complete(r)
 }

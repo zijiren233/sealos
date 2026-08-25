@@ -63,7 +63,7 @@ func TestUncachedObjectsIncludesPod(t *testing.T) {
 	t.Fatal("pod reads are not configured to bypass the cache")
 }
 
-func TestTransformPodKeepsOnlyMetadata(t *testing.T) {
+func TestTransformPodKeepsOnlyReconcileFields(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "pod-a",
@@ -93,9 +93,14 @@ func TestTransformPodKeepsOnlyMetadata(t *testing.T) {
 		got.ResourceVersion != pod.ResourceVersion {
 		t.Fatalf("metadata was not retained: %#v", got.ObjectMeta)
 	}
+	if got.Spec.SchedulerName != pod.Spec.SchedulerName || got.Status.Phase != pod.Status.Phase {
+		t.Fatalf("required pod fields were not retained: %#v", got)
+	}
+	got.Spec.SchedulerName = ""
+	got.Status.Phase = ""
 	if !reflect.DeepEqual(got.Spec, corev1.PodSpec{}) ||
 		!reflect.DeepEqual(got.Status, corev1.PodStatus{}) {
-		t.Fatalf("pod data was retained: %#v", got)
+		t.Fatalf("unused pod data was retained: %#v", got)
 	}
 	if len(got.Annotations) != 0 || len(got.ManagedFields) != 0 {
 		t.Fatalf("unused metadata was retained: %#v", got.ObjectMeta)

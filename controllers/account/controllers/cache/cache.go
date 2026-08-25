@@ -53,7 +53,8 @@ func Options() ctrlcache.Options {
 func UncachedObjects() []client.Object {
 	return []client.Object{
 		&corev1.LimitRange{},
-		// PodReconciler watches metadata only and fetches complete Pods during reconciliation.
+		// Other controllers need complete Pods; PodReconciler reads its projection
+		// directly from the cache.
 		&corev1.Pod{},
 		&corev1.ResourceQuota{},
 		&accountv1.Debt{},
@@ -104,6 +105,12 @@ func transformPod(obj any) (any, error) {
 	return &corev1.Pod{
 		TypeMeta:   pod.TypeMeta,
 		ObjectMeta: projectObjectMeta(pod.ObjectMeta),
+		Spec: corev1.PodSpec{
+			SchedulerName: pod.Spec.SchedulerName,
+		},
+		Status: corev1.PodStatus{
+			Phase: pod.Status.Phase,
+		},
 	}, nil
 }
 
