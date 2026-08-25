@@ -18,11 +18,117 @@ import (
 	"context"
 
 	accountv1 "github.com/labring/sealos/controllers/account/api/v1"
-	v1 "github.com/labring/sealos/controllers/user/api/v1"
+	accounttypes "github.com/labring/sealos/controllers/pkg/types"
+	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// Options limits cached objects to the fields consumed by account controllers.
+func Options() ctrlcache.Options {
+	return ctrlcache.Options{
+		DefaultTransform: ctrlcache.TransformStripManagedFields(),
+		ByObject: map[client.Object]ctrlcache.ByObject{
+			&corev1.Namespace{}: {Transform: transformNamespace},
+			&userv1.User{}:      {Transform: transformUser},
+		},
+	}
+}
+
+func transformNamespace(obj any) (any, error) {
+	ns, ok := obj.(*corev1.Namespace)
+	if !ok {
+		return obj, nil
+	}
+
+	metadata := projectObjectMeta(ns.ObjectMeta)
+	metadata.Labels = copyMapValues(ns.Labels, userv1.UserLabelOwnerKey)
+	metadata.Annotations = copyMapValues(
+		ns.Annotations,
+		accounttypes.DebtNamespaceAnnoStatusKey,
+		accounttypes.FinalDeletionReplayAnnotationKey,
+		accounttypes.NetworkStatusAnnoKey,
+		accounttypes.WorkspaceSubscriptionStatusAnnoKey,
+		accounttypes.WorkspaceSubscriptionStatusUpdateTimeAnnoKey,
+	)
+	return &corev1.Namespace{
+		TypeMeta:   ns.TypeMeta,
+		ObjectMeta: metadata,
+		Spec: corev1.NamespaceSpec{
+			Finalizers: append([]corev1.FinalizerName(nil), ns.Spec.Finalizers...),
+		},
+		Status: corev1.NamespaceStatus{
+			Phase: ns.Status.Phase,
+		},
+	}, nil
+}
+
+func transformUser(obj any) (any, error) {
+	if metadata, ok := obj.(*metav1.PartialObjectMetadata); ok {
+		projected := &metav1.PartialObjectMetadata{
+			TypeMeta:   metadata.TypeMeta,
+			ObjectMeta: projectObjectMeta(metadata.ObjectMeta),
+		}
+		projected.Annotations = copyMapValues(
+			metadata.Annotations,
+			userv1.UserAnnotationOwnerKey,
+			"user.sealos.io/init-account-time",
+			"user.sealos.io/workspace-status",
+		)
+		return projected, nil
+	}
+	user, ok := obj.(*userv1.User)
+	if !ok {
+		return obj, nil
+	}
+
+	metadata := projectObjectMeta(user.ObjectMeta)
+	metadata.Annotations = copyMapValues(
+		user.Annotations,
+		userv1.UserAnnotationOwnerKey,
+		"user.sealos.io/init-account-time",
+		"user.sealos.io/workspace-status",
+	)
+	return &userv1.User{
+		TypeMeta:   user.TypeMeta,
+		ObjectMeta: metadata,
+	}, nil
+}
+
+func projectObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
+	out := metav1.ObjectMeta{
+		Name:              in.Name,
+		Namespace:         in.Namespace,
+		UID:               in.UID,
+		ResourceVersion:   in.ResourceVersion,
+		Generation:        in.Generation,
+		CreationTimestamp: in.CreationTimestamp,
+	}
+	if in.DeletionTimestamp != nil {
+		out.DeletionTimestamp = in.DeletionTimestamp.DeepCopy()
+	}
+	if in.DeletionGracePeriodSeconds != nil {
+		gracePeriod := *in.DeletionGracePeriodSeconds
+		out.DeletionGracePeriodSeconds = &gracePeriod
+	}
+	return out
+}
+
+func copyMapValues(source map[string]string, keys ...string) map[string]string {
+	var result map[string]string
+	for _, key := range keys {
+		if value, ok := source[key]; ok {
+			if result == nil {
+				result = make(map[string]string)
+			}
+			result[key] = value
+		}
+	}
+	return result
+}
 
 func SetupCache(mgr ctrl.Manager) error {
 	ns := &corev1.Namespace{}
@@ -38,7 +144,7 @@ func SetupCache(mgr ctrl.Manager) error {
 		if !ok {
 			return nil
 		}
-		return []string{_ns.Labels[v1.UserLabelOwnerKey]}
+		return []string{_ns.Labels[userv1.UserLabelOwnerKey]}
 	}
 
 	for _, idx := range []struct {
