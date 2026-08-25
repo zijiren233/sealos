@@ -47,7 +47,11 @@ func TestUpdateStatusPreservesUncachedKubeConfig(t *testing.T) {
 		Build()
 
 	projected := &userv1.User{}
-	if err := cli.Get(context.Background(), client.ObjectKeyFromObject(stored), projected); err != nil {
+	if err := cli.Get(
+		context.Background(),
+		client.ObjectKeyFromObject(stored),
+		projected,
+	); err != nil {
 		t.Fatalf("get user: %v", err)
 	}
 	projected.Status.KubeConfig = ""
@@ -112,7 +116,11 @@ func TestPatchUserOwnerPreservesUncachedAnnotations(t *testing.T) {
 	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(stored).Build()
 
 	projected := &userv1.User{}
-	if err := cli.Get(context.Background(), client.ObjectKeyFromObject(stored), projected); err != nil {
+	if err := cli.Get(
+		context.Background(),
+		client.ObjectKeyFromObject(stored),
+		projected,
+	); err != nil {
 		t.Fatalf("get user: %v", err)
 	}
 	projected.Annotations = map[string]string{
@@ -132,6 +140,9 @@ func TestPatchUserOwnerPreservesUncachedAnnotations(t *testing.T) {
 		t.Fatalf("owner = %q, want new-owner", got.Annotations[userv1.UserAnnotationOwnerKey])
 	}
 	if got.Annotations[userv1.UserAnnotationDisplayKey] != "display-name" {
-		t.Fatalf("display annotation = %q, want display-name", got.Annotations[userv1.UserAnnotationDisplayKey])
+		t.Fatalf(
+			"display annotation = %q, want display-name",
+			got.Annotations[userv1.UserAnnotationDisplayKey],
+		)
 	}
 }

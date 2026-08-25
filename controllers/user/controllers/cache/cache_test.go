@@ -230,7 +230,11 @@ func TestTransformMetadataKeepsOnlyEventFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transform key metadata: %v", err)
 	}
-	if gotKey := keyOnly.(*metav1.PartialObjectMetadata); len(gotKey.OwnerReferences) != 0 {
+	gotKey, ok := keyOnly.(*metav1.PartialObjectMetadata)
+	if !ok {
+		t.Fatalf("key metadata type = %T, want *metav1.PartialObjectMetadata", keyOnly)
+	}
+	if len(gotKey.OwnerReferences) != 0 {
 		t.Fatalf("key-only owner references were retained: %#v", gotKey.OwnerReferences)
 	}
 }
@@ -249,7 +253,7 @@ func TestUncachedObjects(t *testing.T) {
 			t.Fatalf("%T reads are still cache-backed", required)
 		}
 	}
-	if _, ok := types[reflect.TypeOf(&userv1.User{})]; ok {
+	if _, ok := types[reflect.TypeFor[*userv1.User]()]; ok {
 		t.Fatal("user reads bypass the projected cache")
 	}
 }
