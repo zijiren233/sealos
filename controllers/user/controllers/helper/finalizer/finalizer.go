@@ -95,8 +95,11 @@ func (f *Finalizer) updateFinalizers(
 	obj client.Object,
 	finalizers []string,
 ) error {
+	gvk, err := f.client.GroupVersionKindFor(obj)
+	if err != nil {
+		return err
+	}
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		gvk := obj.GetObjectKind().GroupVersionKind()
 		fetchObject := &unstructured.Unstructured{}
 		fetchObject.SetAPIVersion(gvk.GroupVersion().String())
 		fetchObject.SetKind(gvk.Kind)
