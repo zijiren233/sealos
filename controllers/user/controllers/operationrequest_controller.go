@@ -77,7 +77,11 @@ func (r *OperationReqReconciler) SetupWithManager(
 	r.userLock = make(map[string]*sync.Mutex)
 	r.Logger.V(1).Info("init reconcile operationrequest controller")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&userv1.Operationrequest{}, builder.WithPredicates(namespaceOnlyPredicate(config.GetUserSystemNamespace()))).
+		For(
+			&userv1.Operationrequest{},
+			builder.WithPredicates(namespaceOnlyPredicate(config.GetUserSystemNamespace())),
+			builder.OnlyMetadata,
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: ratelimiter.GetConcurrent(opts),
 			RateLimiter:             ratelimiter.GetRateLimiter(opts),

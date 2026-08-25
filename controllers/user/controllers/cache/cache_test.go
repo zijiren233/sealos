@@ -1,0 +1,137 @@
+// Copyright 2026 labring.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cache
+
+import (
+	"reflect"
+	"testing"
+	"time"
+
+	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	"github.com/labring/sealos/controllers/user/controllers/helper/config"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+func TestOptionsLimitsSecretCache(t *testing.T) {
+	syncPeriod := time.Hour
+	options := Options(&syncPeriod)
+	if options.SyncPeriod != &syncPeriod {
+		t.Fatal("sync period was not retained")
+	}
+	if !options.ReaderFailOnMissingInformer {
+		t.Fatal("missing informer reads are allowed")
+	}
+	if options.DefaultTransform == nil {
+		t.Fatal("default managed fields transform is nil")
+	}
+
+	found := false
+	for obj, byObject := range options.ByObject {
+		if _, ok := obj.(*corev1.Secret); !ok {
+			continue
+		}
+		found = true
+		if byObject.Transform == nil {
+			t.Fatal("secret transform is nil")
+		}
+		if len(byObject.Namespaces) != 1 {
+			t.Fatalf("secret cache namespaces = %d, want 1", len(byObject.Namespaces))
+		}
+		if _, ok := byObject.Namespaces[config.GetUserSystemNamespace()]; !ok {
+			t.Fatal("user system namespace is not cached for secrets")
+		}
+	}
+	if !found {
+		t.Fatal("secret cache options not found")
+	}
+}
+
+func TestOptionsLimitNamespacedMetadataCaches(t *testing.T) {
+	options := Options(nil)
+	for _, required := range []client.Object{
+		&corev1.ServiceAccount{},
+		&userv1.Operationrequest{},
+	} {
+		found := false
+		for obj, byObject := range options.ByObject {
+			if reflect.TypeOf(obj) != reflect.TypeOf(required) {
+				continue
+			}
+			found = true
+			if len(byObject.Namespaces) != 1 {
+				t.Fatalf("%T cache namespaces = %d, want 1", required, len(byObject.Namespaces))
+			}
+			if _, ok := byObject.Namespaces[config.GetUserSystemNamespace()]; !ok {
+				t.Fatalf("%T cache is not limited to the user system namespace", required)
+			}
+		}
+		if !found {
+			t.Fatalf("%T cache options not found", required)
+		}
+	}
+}
+
+func TestTransformSecretKeepsOnlyIndexMetadata(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "token-a",
+			Namespace:       config.GetUserSystemNamespace(),
+			ResourceVersion: "42",
+			Annotations: map[string]string{
+				corev1.ServiceAccountNameKey: "user-a",
+				"unused.example/key":         "large-value",
+			},
+			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+		Data: map[string][]byte{"token": []byte("sensitive-data")},
+	}
+
+	transformed, err := transformSecret(secret)
+	if err != nil {
+		t.Fatalf("transform secret: %v", err)
+	}
+	got, ok := transformed.(*corev1.Secret)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *corev1.Secret", transformed)
+	}
+	if got.Name != secret.Name || got.Namespace != secret.Namespace || got.ResourceVersion != "42" {
+		t.Fatalf("required metadata was not retained: %#v", got.ObjectMeta)
+	}
+	if got.Annotations[corev1.ServiceAccountNameKey] != "user-a" || len(got.Annotations) != 1 {
+		t.Fatalf("secret index annotations = %#v", got.Annotations)
+	}
+	if got.Type != "" || len(got.Data) != 0 || len(got.ManagedFields) != 0 {
+		t.Fatalf("secret payload was retained: %#v", got)
+	}
+}
+
+func TestUncachedObjects(t *testing.T) {
+	types := make(map[reflect.Type]struct{})
+	for _, obj := range UncachedObjects() {
+		types[reflect.TypeOf(obj)] = struct{}{}
+	}
+	for _, required := range []client.Object{
+		&corev1.Namespace{},
+		&corev1.Secret{},
+		&corev1.ServiceAccount{},
+	} {
+		if _, ok := types[reflect.TypeOf(required)]; !ok {
+			t.Fatalf("%T reads are still cache-backed", required)
+		}
+	}
+}

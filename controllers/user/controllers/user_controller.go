@@ -101,7 +101,11 @@ type userReconcileState struct {
 func (r *UserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.Logger.V(1).Info("start reconcile for users")
 	user := &userv1.User{}
-	if err := r.Get(ctx, req.NamespacedName, user); err != nil {
+	reader := r.apiReader
+	if reader == nil {
+		reader = r.Client
+	}
+	if err := reader.Get(ctx, req.NamespacedName, user); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -197,11 +201,22 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&userv1.User{}, builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.AnnotationChangedPredicate{}))).
-		Watches(&licensev1.License{}, handler.EnqueueRequestsFromMapFunc(r.licenseToUserRequests)).
-		Watches(&rbacv1.Role{}, ownerEventHandler).
-		Watches(&rbacv1.RoleBinding{}, ownerEventHandler).
-		Watches(&v1.ServiceAccount{}, ownerEventHandler).
+		For(
+			&userv1.User{},
+			builder.WithPredicates(predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.AnnotationChangedPredicate{},
+			)),
+			builder.OnlyMetadata,
+		).
+		Watches(
+			&licensev1.License{},
+			handler.EnqueueRequestsFromMapFunc(r.licenseToUserRequests),
+			builder.OnlyMetadata,
+		).
+		Watches(&rbacv1.Role{}, ownerEventHandler, builder.OnlyMetadata).
+		Watches(&rbacv1.RoleBinding{}, ownerEventHandler, builder.OnlyMetadata).
+		Watches(&v1.ServiceAccount{}, ownerEventHandler, builder.OnlyMetadata).
 		WithOptions(kubecontroller.Options{
 			MaxConcurrentReconciles: ratelimiter.GetConcurrent(opts),
 			RateLimiter:             ratelimiter.GetRateLimiter(opts),
@@ -255,6 +270,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 		// Best-effort migration cleanup for legacy service-account-token secrets.
 		if err := kubeconfig.CleanupLegacyBoundTokenSecrets(
 			ctx,
+			r.cache,
 			r.Client,
 			user.Name,
 			state.currentSecretName,
@@ -896,17 +912,6 @@ func (r *UserReconciler) updateStatus(
 }
 
 func (r *UserReconciler) handleLicenseLimit(ctx context.Context, user *userv1.User) (bool, error) {
-	reader := r.apiReader
-	if reader == nil {
-		reader = r.Client
-	}
-
-	latest := &userv1.User{}
-	if err := reader.Get(ctx, client.ObjectKeyFromObject(user), latest); err != nil {
-		return false, err
-	}
-	*user = *latest.DeepCopy()
-
 	if !r.isNewUser(user) {
 		user.Status.Conditions = helper.DeleteCondition(
 			user.Status.Conditions,
@@ -979,8 +984,9 @@ func (r *UserReconciler) licenseToUserRequests(
 	ctx context.Context,
 	obj client.Object,
 ) []ctrl.Request {
-	userList := &userv1.UserList{}
-	if err := r.List(ctx, userList); err != nil {
+	userList := &metav1.PartialObjectMetadataList{}
+	userList.SetGroupVersionKind(userv1.GroupVersion.WithKind("UserList"))
+	if err := r.cache.List(ctx, userList); err != nil {
 		r.Logger.Error(err, "list users for license change failed")
 		return nil
 	}
