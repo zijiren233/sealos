@@ -120,6 +120,65 @@ func TestTransformSecretKeepsOnlyIndexMetadata(t *testing.T) {
 	}
 }
 
+func TestTransformUserDropsOnlyLargeUnusedFields(t *testing.T) {
+	rotateAt := metav1.Now()
+	user := &userv1.User{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "user-a",
+			ResourceVersion: "42",
+			Annotations:     map[string]string{userv1.UserAnnotationOwnerKey: "owner-a"},
+			Labels:          map[string]string{"user.sealos.io/status": "active"},
+			Finalizers:      []string{"sealos.io/user.finalizers"},
+			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "test"}},
+		},
+		Spec: userv1.UserSpec{
+			CSRExpirationSeconds: 600,
+			KubeConfigRotateAt:   &rotateAt,
+		},
+		Status: userv1.UserStatus{
+			Phase:                        userv1.UserActive,
+			KubeConfig:                   "large-kubeconfig",
+			ObservedCSRExpirationSeconds: 600,
+			ObservedKubeConfigRotateAt:   &rotateAt,
+			ObservedGeneration:           7,
+			Conditions: []userv1.Condition{{
+				Type:   userv1.Ready,
+				Status: corev1.ConditionTrue,
+			}},
+		},
+	}
+
+	transformed, err := transformUser(user)
+	if err != nil {
+		t.Fatalf("transform user: %v", err)
+	}
+	got, ok := transformed.(*userv1.User)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *v1.User", transformed)
+	}
+	if got.Status.KubeConfig != "" {
+		t.Fatal("kubeconfig was retained")
+	}
+	if len(got.ManagedFields) != 0 {
+		t.Fatal("managed fields were retained")
+	}
+	if got.Name != user.Name || got.ResourceVersion != user.ResourceVersion ||
+		!reflect.DeepEqual(got.Annotations, user.Annotations) ||
+		!reflect.DeepEqual(got.Labels, user.Labels) ||
+		!reflect.DeepEqual(got.Finalizers, user.Finalizers) ||
+		!reflect.DeepEqual(got.Spec, user.Spec) {
+		t.Fatalf("required user fields were not retained: %#v", got)
+	}
+	wantStatus := user.Status.DeepCopy()
+	wantStatus.KubeConfig = ""
+	if !reflect.DeepEqual(&got.Status, wantStatus) {
+		t.Fatalf("status = %#v, want %#v", got.Status, *wantStatus)
+	}
+	if user.Status.KubeConfig == "" || len(user.ManagedFields) == 0 {
+		t.Fatal("transform mutated the source user")
+	}
+}
+
 func TestUncachedObjects(t *testing.T) {
 	types := make(map[reflect.Type]struct{})
 	for _, obj := range UncachedObjects() {
@@ -133,5 +192,8 @@ func TestUncachedObjects(t *testing.T) {
 		if _, ok := types[reflect.TypeOf(required)]; !ok {
 			t.Fatalf("%T reads are still cache-backed", required)
 		}
+	}
+	if _, ok := types[reflect.TypeOf(&userv1.User{})]; ok {
+		t.Fatal("user reads bypass the projected cache")
 	}
 }

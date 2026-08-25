@@ -64,3 +64,51 @@ func TestAddFinalizerResolvesMissingGVK(t *testing.T) {
 		t.Fatalf("finalizers = %v, want %q", got.Finalizers, finalizerName)
 	}
 }
+
+type updateCountingClient struct {
+	client.Client
+	updates int
+}
+
+func (c *updateCountingClient) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.UpdateOption,
+) error {
+	c.updates++
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func TestAddFinalizerSkipsExistingFinalizerUpdate(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	const finalizerName = "test.sealos.io/finalizer"
+	stored := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test",
+			Namespace:  "default",
+			Finalizers: []string{finalizerName},
+		},
+	}
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(stored).Build()
+	cli := &updateCountingClient{Client: baseClient}
+
+	obj := &corev1.ConfigMap{}
+	if err := cli.Get(context.Background(), client.ObjectKeyFromObject(stored), obj); err != nil {
+		t.Fatalf("get configmap: %v", err)
+	}
+	handled, err := NewFinalizer(cli, finalizerName).AddFinalizer(context.Background(), obj)
+	if err != nil {
+		t.Fatalf("add finalizer: %v", err)
+	}
+	if !handled {
+		t.Fatal("object was not handled")
+	}
+	if cli.updates != 0 {
+		t.Fatalf("updates = %d, want 0", cli.updates)
+	}
+}

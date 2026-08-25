@@ -27,14 +27,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Options keeps only explicitly registered informer data in memory. Controllers
-// watch metadata for event routing and fetch complete objects during reconcile.
+// Options keeps only explicitly registered informer data in memory. Large
+// fields are removed when controllers only need a smaller object projection.
 func Options(syncPeriod *time.Duration) ctrlcache.Options {
 	return ctrlcache.Options{
 		SyncPeriod:                  syncPeriod,
 		ReaderFailOnMissingInformer: true,
 		DefaultTransform:            ctrlcache.TransformStripManagedFields(),
 		ByObject: map[client.Object]ctrlcache.ByObject{
+			&userv1.User{}: {
+				Transform: transformUser,
+			},
 			&corev1.Secret{}: {
 				Namespaces: map[string]ctrlcache.Config{
 					config.GetUserSystemNamespace(): {},
@@ -61,7 +64,6 @@ func UncachedObjects() []client.Object {
 		&licensev1.License{},
 		&userv1.DeleteRequest{},
 		&userv1.Operationrequest{},
-		&userv1.User{},
 		&corev1.Namespace{},
 		&corev1.Secret{},
 		&corev1.ServiceAccount{},
@@ -69,6 +71,18 @@ func UncachedObjects() []client.Object {
 		&rbacv1.Role{},
 		&rbacv1.RoleBinding{},
 	}
+}
+
+func transformUser(obj any) (any, error) {
+	user, ok := obj.(*userv1.User)
+	if !ok {
+		return obj, nil
+	}
+
+	projected := user.DeepCopy()
+	projected.ManagedFields = nil
+	projected.Status.KubeConfig = ""
+	return projected, nil
 }
 
 func transformSecret(obj any) (any, error) {

@@ -22,7 +22,6 @@ import (
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/pkg/usercount"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -50,9 +49,7 @@ func (r *userCountRunnable) NeedLeaderElection() bool {
 
 func SetupUserCount(mgr ctrl.Manager) (*usercount.Counter, error) {
 	counter := usercount.NewCounter()
-	userMetadata := &metav1.PartialObjectMetadata{}
-	userMetadata.SetGroupVersionKind(userv1.GroupVersion.WithKind("User"))
-	informer, err := mgr.GetCache().GetInformer(context.Background(), userMetadata)
+	informer, err := mgr.GetCache().GetInformer(context.Background(), &userv1.User{})
 	if err != nil {
 		return nil, fmt.Errorf("get user informer: %w", err)
 	}

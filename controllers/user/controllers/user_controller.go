@@ -40,7 +40,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -69,7 +68,6 @@ type UserReconciler struct {
 	Logger      logr.Logger
 	Recorder    record.EventRecorder
 	cache       cache.Cache
-	apiReader   client.Reader
 	userCounter *usercount.Counter
 	config      *rest.Config
 	*runtime.Scheme
@@ -101,11 +99,7 @@ type userReconcileState struct {
 func (r *UserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.Logger.V(1).Info("start reconcile for users")
 	user := &userv1.User{}
-	reader := r.apiReader
-	if reader == nil {
-		reader = r.Client
-	}
-	if err := reader.Get(ctx, req.NamespacedName, user); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, user); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -163,11 +157,11 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 		r.Recorder = mgr.GetEventRecorderFor(controllerName)
 	}
 	if r.finalizer == nil {
-		r.finalizer = finalizer.NewFinalizer(r.Client, "sealos.io/user.finalizers")
+		r.finalizer = finalizer.NewFinalizer(r.Client, "sealos.io/user.finalizers").
+			WithReader(mgr.GetAPIReader())
 	}
 	r.Scheme = mgr.GetScheme()
 	r.cache = mgr.GetCache()
-	r.apiReader = mgr.GetAPIReader()
 	r.userCounter = userCounter
 	r.config = mgr.GetConfig()
 	r.Logger.V(1).Info("init reconcile controller user")
@@ -207,7 +201,6 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 				predicate.GenerationChangedPredicate{},
 				predicate.AnnotationChangedPredicate{},
 			)),
-			builder.OnlyMetadata,
 		).
 		Watches(
 			&licensev1.License{},
@@ -235,7 +228,8 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 		return ctrl.Result{}, errors.New("obj convert user is error")
 	}
 
-	blocked, err := r.handleLicenseLimit(ctx, user)
+	originalStatus := user.Status.DeepCopy()
+	blocked, err := r.handleLicenseLimit(ctx, user, originalStatus)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -286,7 +280,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 			r.Logger.Error(err, "cleanup stale bound token secrets", "user", user.Name)
 		}
 	}
-	err = r.updateStatus(ctx, client.ObjectKeyFromObject(obj), user.Status.DeepCopy())
+	err = r.updateStatus(ctx, user, originalStatus)
 	if err != nil {
 		r.Recorder.Eventf(
 			user,
@@ -898,20 +892,19 @@ func (r *UserReconciler) shouldRotateKubeConfig(user *userv1.User) bool {
 
 func (r *UserReconciler) updateStatus(
 	ctx context.Context,
-	nn types.NamespacedName,
-	status *userv1.UserStatus,
+	user *userv1.User,
+	originalStatus *userv1.UserStatus,
 ) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		original := &userv1.User{}
-		if err := r.Get(ctx, nn, original); err != nil {
-			return err
-		}
-		original.Status = *status
-		return r.Client.Status().Update(ctx, original)
-	})
+	original := user.DeepCopy()
+	original.Status = *originalStatus.DeepCopy()
+	return r.Client.Status().Patch(ctx, user, client.MergeFrom(original))
 }
 
-func (r *UserReconciler) handleLicenseLimit(ctx context.Context, user *userv1.User) (bool, error) {
+func (r *UserReconciler) handleLicenseLimit(
+	ctx context.Context,
+	user *userv1.User,
+	originalStatus *userv1.UserStatus,
+) (bool, error) {
 	if !r.isNewUser(user) {
 		user.Status.Conditions = helper.DeleteCondition(
 			user.Status.Conditions,
@@ -943,8 +936,8 @@ func (r *UserReconciler) handleLicenseLimit(ctx context.Context, user *userv1.Us
 	user.Status.Conditions = helper.UpdateCondition(user.Status.Conditions, *limitCondition)
 	if err := r.updateStatus(
 		ctx,
-		client.ObjectKeyFromObject(user),
-		user.Status.DeepCopy(),
+		user,
+		originalStatus,
 	); err != nil {
 		return false, err
 	}
@@ -984,8 +977,7 @@ func (r *UserReconciler) licenseToUserRequests(
 	ctx context.Context,
 	obj client.Object,
 ) []ctrl.Request {
-	userList := &metav1.PartialObjectMetadataList{}
-	userList.SetGroupVersionKind(userv1.GroupVersion.WithKind("UserList"))
+	userList := &userv1.UserList{}
 	if err := r.cache.List(ctx, userList); err != nil {
 		r.Logger.Error(err, "list users for license change failed")
 		return nil
