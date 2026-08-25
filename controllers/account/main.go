@@ -37,7 +37,6 @@ import (
 	"github.com/labring/sealos/controllers/pkg/utils/env"
 	"github.com/labring/sealos/controllers/pkg/utils/maps"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -146,12 +145,7 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Cache:  cache.Options(),
-		Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{
-			&corev1.LimitRange{},
-			&corev1.ResourceQuota{},
-			&accountv1.Debt{},
-			&notificationv1.Notification{},
-		}}},
+		Client: client.Options{Cache: &client.CacheOptions{DisableFor: cache.UncachedObjects()}},
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
@@ -277,7 +271,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", controller)
 		os.Exit(1)
 	}
-	if err = (accountReconciler).SetupWithManager(mgr, rateOpts); err != nil {
+	if err = accountReconciler.SetupWithManager(mgr, rateOpts); err != nil {
 		setupManagerError(err, "Account")
 	}
 	debtUserMap := maps.NewConcurrentMap()

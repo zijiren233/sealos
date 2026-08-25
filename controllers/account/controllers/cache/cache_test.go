@@ -20,10 +20,125 @@ import (
 	"reflect"
 	"testing"
 
+	accountv1 "github.com/labring/sealos/controllers/account/api/v1"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 )
+
+func TestPodCacheOptions(t *testing.T) {
+	found := false
+	for obj, options := range Options().ByObject {
+		if _, ok := obj.(*corev1.Pod); !ok {
+			continue
+		}
+		found = true
+		if options.Field == nil {
+			t.Fatal("pod cache field selector is nil")
+		}
+		if !options.Field.Matches(fields.Set{
+			podSchedulerNameField: accountv1.DebtSchedulerName,
+		}) {
+			t.Fatal("pod cache selector excludes debt scheduler pods")
+		}
+		if options.Field.Matches(fields.Set{podSchedulerNameField: "default-scheduler"}) {
+			t.Fatal("pod cache selector includes regular pods")
+		}
+		if options.Transform == nil {
+			t.Fatal("pod cache transform is nil")
+		}
+	}
+	if !found {
+		t.Fatal("pod cache options not found")
+	}
+}
+
+func TestUncachedObjectsIncludesPod(t *testing.T) {
+	for _, obj := range UncachedObjects() {
+		if _, ok := obj.(*corev1.Pod); ok {
+			return
+		}
+	}
+	t.Fatal("pod reads are not configured to bypass the cache")
+}
+
+func TestTransformPodKeepsOnlyMetadata(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pod-a",
+			Namespace:       "ns-a",
+			ResourceVersion: "42",
+			Annotations:     map[string]string{"unused.example/key": "large-value"},
+			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "test"}},
+		},
+		Spec: corev1.PodSpec{
+			SchedulerName: accountv1.DebtSchedulerName,
+			Containers:    []corev1.Container{{Name: "app", Image: "example/app:latest"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+		},
+	}
+
+	transformed, err := transformPod(pod)
+	if err != nil {
+		t.Fatalf("transform pod: %v", err)
+	}
+	got, ok := transformed.(*corev1.Pod)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *corev1.Pod", transformed)
+	}
+	if got.Name != pod.Name || got.Namespace != pod.Namespace ||
+		got.ResourceVersion != pod.ResourceVersion {
+		t.Fatalf("metadata was not retained: %#v", got.ObjectMeta)
+	}
+	if !reflect.DeepEqual(got.Spec, corev1.PodSpec{}) ||
+		!reflect.DeepEqual(got.Status, corev1.PodStatus{}) {
+		t.Fatalf("pod data was retained: %#v", got)
+	}
+	if len(got.Annotations) != 0 || len(got.ManagedFields) != 0 {
+		t.Fatalf("unused metadata was retained: %#v", got.ObjectMeta)
+	}
+	if len(pod.ManagedFields) == 0 || len(pod.Spec.Containers) == 0 {
+		t.Fatal("transform mutated the source object")
+	}
+}
+
+func TestTransformPartialPodKeepsOnlyMetadata(t *testing.T) {
+	pod := &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pod-a",
+			Namespace:       "ns-a",
+			ResourceVersion: "42",
+			Labels:          map[string]string{"unused.example/key": "large-value"},
+			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "test"}},
+		},
+	}
+	pod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
+
+	transformed, err := transformPod(pod)
+	if err != nil {
+		t.Fatalf("transform partial pod: %v", err)
+	}
+	got, ok := transformed.(*metav1.PartialObjectMetadata)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *metav1.PartialObjectMetadata", transformed)
+	}
+	if got.Name != pod.Name || got.Namespace != pod.Namespace ||
+		got.ResourceVersion != pod.ResourceVersion {
+		t.Fatalf("metadata was not retained: %#v", got.ObjectMeta)
+	}
+	if got.GroupVersionKind() != pod.GroupVersionKind() {
+		t.Fatalf("GVK = %s, want %s", got.GroupVersionKind(), pod.GroupVersionKind())
+	}
+	if len(got.Labels) != 0 || len(got.ManagedFields) != 0 {
+		t.Fatalf("unused metadata was retained: %#v", got.ObjectMeta)
+	}
+	if len(pod.Labels) == 0 || len(pod.ManagedFields) == 0 {
+		t.Fatal("transform mutated the source object")
+	}
+}
 
 func TestTransformUserKeepsOnlyMetadata(t *testing.T) {
 	user := &userv1.User{

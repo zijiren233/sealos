@@ -18,14 +18,18 @@ import (
 	"context"
 
 	accountv1 "github.com/labring/sealos/controllers/account/api/v1"
+	notificationv1 "github.com/labring/sealos/controllers/pkg/notification/api/v1"
 	accounttypes "github.com/labring/sealos/controllers/pkg/types"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const podSchedulerNameField = "spec.schedulerName"
 
 // Options limits cached objects to the fields consumed by account controllers.
 func Options() ctrlcache.Options {
@@ -33,8 +37,27 @@ func Options() ctrlcache.Options {
 		DefaultTransform: ctrlcache.TransformStripManagedFields(),
 		ByObject: map[client.Object]ctrlcache.ByObject{
 			&corev1.Namespace{}: {Transform: transformNamespace},
-			&userv1.User{}:      {Transform: transformUser},
+			&corev1.Pod{}: {
+				Field: fields.OneTermEqualSelector(
+					podSchedulerNameField,
+					accountv1.DebtSchedulerName,
+				),
+				Transform: transformPod,
+			},
+			&userv1.User{}: {Transform: transformUser},
 		},
+	}
+}
+
+// UncachedObjects returns objects whose reads require complete, current API data.
+func UncachedObjects() []client.Object {
+	return []client.Object{
+		&corev1.LimitRange{},
+		// PodReconciler watches metadata only and fetches complete Pods during reconciliation.
+		&corev1.Pod{},
+		&corev1.ResourceQuota{},
+		&accountv1.Debt{},
+		&notificationv1.Notification{},
 	}
 }
 
@@ -63,6 +86,24 @@ func transformNamespace(obj any) (any, error) {
 		Status: corev1.NamespaceStatus{
 			Phase: ns.Status.Phase,
 		},
+	}, nil
+}
+
+func transformPod(obj any) (any, error) {
+	if metadata, ok := obj.(*metav1.PartialObjectMetadata); ok {
+		return &metav1.PartialObjectMetadata{
+			TypeMeta:   metadata.TypeMeta,
+			ObjectMeta: projectObjectMeta(metadata.ObjectMeta),
+		}, nil
+	}
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return obj, nil
+	}
+
+	return &corev1.Pod{
+		TypeMeta:   pod.TypeMeta,
+		ObjectMeta: projectObjectMeta(pod.ObjectMeta),
 	}, nil
 }
 
