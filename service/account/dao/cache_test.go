@@ -45,8 +45,13 @@ func TestTransformNamespaceKeepsServiceFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transform namespace: %v", err)
 	}
-	got := transformed.(*corev1.Namespace)
-	if got.Name != ns.Name || got.Labels[UserOwnerLabel] != "owner-a" || len(got.Annotations) == 0 {
+	got, ok := transformed.(*corev1.Namespace)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *corev1.Namespace", transformed)
+	}
+	if got.Name != ns.Name ||
+		got.Labels[UserOwnerLabel] != "owner-a" ||
+		len(got.Annotations) == 0 {
 		t.Fatalf("service metadata was not retained: %#v", got.ObjectMeta)
 	}
 	if _, ok := got.Annotations["unused.example/key"]; ok {
@@ -55,7 +60,9 @@ func TestTransformNamespaceKeepsServiceFields(t *testing.T) {
 	if got.Status.Phase != corev1.NamespaceActive {
 		t.Fatalf("phase = %q, want %q", got.Status.Phase, corev1.NamespaceActive)
 	}
-	if len(got.Spec.Finalizers) != len(ns.Spec.Finalizers) || len(got.Status.Conditions) != 0 || len(got.ManagedFields) != 0 {
+	if len(got.Spec.Finalizers) != len(ns.Spec.Finalizers) ||
+		len(got.Status.Conditions) != 0 ||
+		len(got.ManagedFields) != 0 {
 		t.Fatalf("unused namespace fields were retained: %#v", got)
 	}
 }

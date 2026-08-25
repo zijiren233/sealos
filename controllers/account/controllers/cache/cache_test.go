@@ -47,7 +47,10 @@ func TestTransformUserKeepsOnlyMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transform user: %v", err)
 	}
-	got := transformed.(*userv1.User)
+	got, ok := transformed.(*userv1.User)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *userv1.User", transformed)
+	}
 	if got.Name != user.Name || got.ResourceVersion != user.ResourceVersion {
 		t.Fatalf("metadata was not retained: %#v", got.ObjectMeta)
 	}
@@ -72,8 +75,11 @@ func TestTransformUserKeepsOnlyMetadata(t *testing.T) {
 func TestTransformPartialUserKeepsOnlyMetadata(t *testing.T) {
 	user := &metav1.PartialObjectMetadata{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:          "user-a",
-			Annotations:   map[string]string{"user.sealos.io/owner": "owner-a", "unused.example/key": "large-value"},
+			Name: "user-a",
+			Annotations: map[string]string{
+				"user.sealos.io/owner": "owner-a",
+				"unused.example/key":   "large-value",
+			},
 			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
 		},
 	}
@@ -83,7 +89,10 @@ func TestTransformPartialUserKeepsOnlyMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transform partial user: %v", err)
 	}
-	got := transformed.(*metav1.PartialObjectMetadata)
+	got, ok := transformed.(*metav1.PartialObjectMetadata)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *metav1.PartialObjectMetadata", transformed)
+	}
 	if got.Name != user.Name || got.Annotations[userv1.UserAnnotationOwnerKey] != "owner-a" {
 		t.Fatalf("metadata was not retained: %#v", got.ObjectMeta)
 	}
@@ -114,8 +123,12 @@ func TestTransformNamespaceKeepsIndexedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transform namespace: %v", err)
 	}
-	got := transformed.(*corev1.Namespace)
-	if got.Labels["user.sealos.io/owner"] != "owner-a" || got.Annotations["debt.sealos/status"] != "Normal" {
+	got, ok := transformed.(*corev1.Namespace)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *corev1.Namespace", transformed)
+	}
+	if got.Labels["user.sealos.io/owner"] != "owner-a" ||
+		got.Annotations["debt.sealos/status"] != "Normal" {
 		t.Fatalf("indexed metadata was not retained: %#v", got.ObjectMeta)
 	}
 	if _, ok := got.Annotations["unused.example/key"]; ok {
@@ -124,7 +137,9 @@ func TestTransformNamespaceKeepsIndexedFields(t *testing.T) {
 	if got.Status.Phase != corev1.NamespaceActive {
 		t.Fatalf("phase = %q, want %q", got.Status.Phase, corev1.NamespaceActive)
 	}
-	if len(got.Spec.Finalizers) != len(ns.Spec.Finalizers) || len(got.Status.Conditions) != 0 || len(got.ManagedFields) != 0 {
+	if len(got.Spec.Finalizers) != len(ns.Spec.Finalizers) ||
+		len(got.Status.Conditions) != 0 ||
+		len(got.ManagedFields) != 0 {
 		t.Fatalf("unused namespace fields were retained: %#v", got)
 	}
 }
