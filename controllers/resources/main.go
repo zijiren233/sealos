@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -137,12 +138,22 @@ func main() {
 	//	os.Exit(1)
 	//}
 
+	managerCtx := ctrl.SetupSignalHandler()
 	go func() {
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		if err := mgr.Start(managerCtx); err != nil {
 			setupLog.Error(err, "problem running manager")
 			os.Exit(1)
 		}
 	}()
+	// ReaderFailOnMissingInformer skips the per-read sync wait, so synchronize all
+	// explicitly registered informers before the monitor performs its first read.
+	if !mgr.GetCache().WaitForCacheSync(managerCtx) {
+		setupLog.Error(
+			errors.New("resource cache sync did not complete"),
+			"unable to start monitor",
+		)
+		os.Exit(1)
+	}
 
 	reconciler, err := controllers.NewMonitorReconciler(mgr)
 	if err != nil {
