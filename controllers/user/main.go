@@ -128,7 +128,7 @@ func main() {
 		&restartPredicateDuration,
 		"restart-predicate-time",
 		time.Hour*2,
-		"Sets the restrat predicate time duration for user controller restart. By default, the duration is set to 2 hours.",
+		"Deprecated: retained for compatibility and ignored. User startup reconciliation processes all cached Users.",
 	)
 	flag.Float64Var(
 		&kubeAPIQPS,

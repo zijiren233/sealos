@@ -80,7 +80,7 @@ const (
 type UserReconciler struct {
 	Logger      logr.Logger
 	Recorder    record.EventRecorder
-	cache       cache.Cache
+	cache       client.Reader
 	userCounter *usercount.Counter
 	config      *rest.Config
 	*runtime.Scheme
@@ -170,12 +170,6 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return r.reconcile(ctx, user)
 	}
 	return ctrl.Result{}, errors.New("reconcile error from Finalizer")
-}
-
-type ControllerRestartPredicate struct {
-	predicate.Funcs
-	duration  time.Duration
-	checkTime time.Time
 }
 
 type OwnerAnnotationChangedPredicate struct {
@@ -555,31 +549,11 @@ func (OwnerAnnotationChangedPredicate) Update(e event.UpdateEvent) bool {
 		e.ObjectNew.GetAnnotations()[userAnnotationOwnerKey]
 }
 
-func NewControllerRestartPredicate(duration time.Duration) *ControllerRestartPredicate {
-	predicate := &ControllerRestartPredicate{
-		checkTime: time.Now().Add(-duration),
-		duration:  duration,
-	}
-	return predicate
-}
-
-// User create events, including those emitted while rebuilding the informer,
-// must reach Reconcile. Reconcile performs the cache consistency check after
-// finalizer handling and decides whether the full pipeline is needed.
-func (p *ControllerRestartPredicate) Create(e event.CreateEvent) bool {
-	if _, ok := e.Object.(*userv1.User); ok {
-		return true
-	}
-	if isUserNamespace(e.Object.GetName()) &&
-		e.Object.GetObjectKind().GroupVersionKind().Kind == "Namespace" {
-		return true
-	}
-	return e.Object.GetCreationTimestamp().After(p.checkTime)
-}
-
 // SetupWithManager sets up the controller with the Manager.
+// The deprecated restart-predicate-time argument is retained for compatibility
+// and ignored.
 func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.RateLimiterOptions,
-	minRequeueDuration, maxRequeueDuration, restartPredicateDuration time.Duration,
+	minRequeueDuration, maxRequeueDuration, _ time.Duration,
 	userCounter *usercount.Counter,
 ) error {
 	const controllerName = "user_controller"
@@ -629,7 +603,7 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 	); err != nil {
 		return err
 	}
-	if err := r.registerStartupCacheInformers(); err != nil {
+	if err := registerStartupCacheInformers(mgr.GetCache()); err != nil {
 		return err
 	}
 
@@ -670,12 +644,11 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 			MaxConcurrentReconciles: ratelimiter.GetConcurrent(opts),
 			RateLimiter:             ratelimiter.GetRateLimiter(opts),
 		}).
-		WithEventFilter(NewControllerRestartPredicate(restartPredicateDuration)).
 		Complete(r)
 }
 
-func (r *UserReconciler) registerStartupCacheInformers() error {
-	if r.cache == nil {
+func registerStartupCacheInformers(informers cache.Informers) error {
+	if informers == nil {
 		return errors.New("user controller cache is nil")
 	}
 	namespaceMetadata := &metav1.PartialObjectMetadata{}
@@ -689,7 +662,7 @@ func (r *UserReconciler) registerStartupCacheInformers() error {
 		&rbacv1.ClusterRoleBinding{},
 	}
 	for _, object := range objects {
-		if _, err := r.cache.GetInformer(context.Background(), object); err != nil {
+		if _, err := informers.GetInformer(context.Background(), object); err != nil {
 			return fmt.Errorf("register startup cache informer for %T: %w", object, err)
 		}
 	}
@@ -927,10 +900,8 @@ func (r *UserReconciler) boundTokenSecretMatches(
 		return false
 	}
 	if user.Status.ObservedKubeConfigSecretUID == "" {
-		if secret.UID != "" {
-			// Backfill the identity for legacy Users without requesting a new token.
-			user.Status.ObservedKubeConfigSecretUID = string(secret.UID)
-		}
+		// Legacy Users without an observed UID can keep using the current Secret.
+		// Persist the UID only after a successful kubeconfig refresh.
 		return true
 	}
 	return string(secret.UID) == user.Status.ObservedKubeConfigSecretUID

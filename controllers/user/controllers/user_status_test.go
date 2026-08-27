@@ -216,40 +216,6 @@ func TestNamespacePodSecurityPredicate(t *testing.T) {
 	}
 }
 
-func TestControllerRestartPredicateKeepsExistingUserNamespaces(t *testing.T) {
-	t.Parallel()
-	oldNamespace := &metav1.PartialObjectMetadata{
-		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "ns-external",
-			CreationTimestamp: metav1.NewTime(time.Now().Add(-24 * time.Hour)),
-		},
-	}
-	p := NewControllerRestartPredicate(time.Hour)
-	if !p.Create(event.CreateEvent{Object: oldNamespace}) {
-		t.Fatal("existing ns-* namespace create event was filtered")
-	}
-}
-
-func TestControllerRestartPredicateEnqueuesHistoricalUsers(t *testing.T) {
-	t.Parallel()
-	oldUser := &userv1.User{ObjectMeta: metav1.ObjectMeta{
-		Name:              "alice",
-		CreationTimestamp: metav1.NewTime(time.Now().Add(-24 * time.Hour)),
-	}}
-	p := NewControllerRestartPredicate(time.Hour)
-	if !p.Create(event.CreateEvent{Object: oldUser}) {
-		t.Fatal("historical user was filtered before reconcile")
-	}
-
-	deletingUser := oldUser.DeepCopy()
-	deletingAt := metav1.Now()
-	deletingUser.DeletionTimestamp = &deletingAt
-	if !p.Create(event.CreateEvent{Object: deletingUser}) {
-		t.Fatal("historical deleting user was filtered")
-	}
-}
-
 func TestCachedUserRequeueUsesStableDeadline(t *testing.T) {
 	t.Parallel()
 	r := &UserReconciler{
