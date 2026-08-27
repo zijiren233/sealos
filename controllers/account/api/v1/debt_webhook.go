@@ -194,7 +194,8 @@ func (d *DebtValidate) checkOption(
 		)
 	}
 	if suspendedStatus, suspended := getSuspendedNamespaceStatus(ns); suspended {
-		logger.V(1).Info("deny request for suspended namespace", "ns", ns.Name, "status", suspendedStatus)
+		logger.V(1).
+			Info("deny request for suspended namespace", "ns", ns.Name, "status", suspendedStatus)
 		return admission.Denied(
 			fmt.Sprintf("namespace %s is suspended with status %s", ns.Name, suspendedStatus),
 		)
