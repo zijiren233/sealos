@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
@@ -27,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -139,14 +141,45 @@ func TestNamespacePodSecurityPredicate(t *testing.T) {
 	if p.Update(event.UpdateEvent{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
 		t.Fatal("unrelated label change triggered reconciliation")
 	}
-	if p.Create(event.CreateEvent{Object: oldNamespace}) {
-		t.Fatal("namespace create should be handled by user reconciliation")
+
+	newNamespace = oldNamespace.DeepCopy()
+	newNamespace.Annotations = map[string]string{userv1.UserAnnotationOwnerKey: "owner-b"}
+	if !p.Update(event.UpdateEvent{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("owner annotation change did not trigger reconciliation")
+	}
+
+	newNamespace = oldNamespace.DeepCopy()
+	newNamespace.Labels[userv1.UserLabelOwnerKey] = "owner-b"
+	if !p.Update(event.UpdateEvent{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("owner label change did not trigger reconciliation")
+	}
+
+	if !p.Create(event.CreateEvent{Object: oldNamespace}) {
+		t.Fatal("ns-* namespace creation did not trigger reconciliation")
+	}
+	if p.Create(event.CreateEvent{Object: &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}}}) {
+		t.Fatal("unmanaged namespace creation triggered reconciliation")
 	}
 	if !p.Delete(event.DeleteEvent{Object: oldNamespace}) {
 		t.Fatal("managed namespace deletion did not trigger reconciliation")
 	}
 	if p.Delete(event.DeleteEvent{Object: &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}}}) {
 		t.Fatal("unmanaged namespace deletion triggered reconciliation")
+	}
+}
+
+func TestControllerRestartPredicateKeepsExistingUserNamespaces(t *testing.T) {
+	t.Parallel()
+	oldNamespace := &metav1.PartialObjectMetadata{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "ns-external",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-24 * time.Hour)),
+		},
+	}
+	p := NewControllerRestartPredicate(time.Hour)
+	if !p.Create(event.CreateEvent{Object: oldNamespace}) {
+		t.Fatal("existing ns-* namespace create event was filtered")
 	}
 }
 
@@ -163,6 +196,60 @@ func TestNamespaceToUserRequests(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "kube-system"},
 	}); requests != nil {
 		t.Fatalf("unmanaged namespace requests = %#v", requests)
+	}
+}
+
+func TestReconcileStrictNamespacePodSecurity(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name:   "ns-external",
+		Labels: map[string]string{"example.com/keep": "value"},
+	}}
+	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns).Build()
+	r := &UserReconciler{Client: cli, EnableStrictNamespacePodSecurity: true}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKey{Name: "external"}}); err != nil {
+		t.Fatalf("reconcile orphan namespace: %v", err)
+	}
+	got := &corev1.Namespace{}
+	if err := cli.Get(context.Background(), client.ObjectKey{Name: ns.Name}, got); err != nil {
+		t.Fatalf("get orphan namespace: %v", err)
+	}
+	if got.Labels[config.PodSecurityLabelPrefix+"enforce"] != "baseline" || got.Labels["example.com/keep"] != "value" {
+		t.Fatalf("orphan namespace labels = %#v", got.Labels)
+	}
+}
+
+func TestReconcileDisabledStrictNamespacePodSecurityPreservesOrphanLabels(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name:   "ns-external",
+		Labels: map[string]string{config.PodSecurityLabelPrefix + "enforce": "privileged"},
+	}}
+	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns).Build()
+	r := &UserReconciler{Client: cli}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKey{Name: "external"}}); err != nil {
+		t.Fatalf("reconcile orphan namespace with strict mode disabled: %v", err)
+	}
+	got := &corev1.Namespace{}
+	if err := cli.Get(context.Background(), client.ObjectKey{Name: ns.Name}, got); err != nil {
+		t.Fatalf("get orphan namespace: %v", err)
+	}
+	if got.Labels[config.PodSecurityLabelPrefix+"enforce"] != "privileged" {
+		t.Fatalf("orphan namespace labels changed: %#v", got.Labels)
 	}
 }
 

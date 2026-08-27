@@ -140,6 +140,14 @@ func transformNamespace(obj any) (any, error) {
 		Name:            metadata.Name,
 		ResourceVersion: metadata.ResourceVersion,
 	}
+	projected.Annotations = copyMapValues(
+		metadata.Annotations,
+		userv1.UserAnnotationOwnerKey,
+	)
+	projected.Labels = copyMapValues(
+		metadata.Labels,
+		userv1.UserLabelOwnerKey,
+	)
 	for key, value := range metadata.Labels {
 		if config.IsPodSecurityLabel(key) {
 			if projected.Labels == nil {

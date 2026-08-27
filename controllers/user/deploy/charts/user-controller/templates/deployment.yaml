@@ -42,6 +42,7 @@ spec:
             - --kube-api-qps={{ .Values.kubeAPI.qps }}
             - --kube-api-burst={{ .Values.kubeAPI.burst }}
             - --enable-admin-cluster-admin={{ .Values.adminClusterAdmin.enabled }}
+            - --enable-strict-namespace-pod-security={{ .Values.strictNamespacePodSecurity.enabled }}
             {{- if .Values.metrics.enabled }}
             - --metrics-secure=true
             - --metrics-bind-address=:8443

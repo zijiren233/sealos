@@ -104,16 +104,20 @@ func TestOptionsLimitsClusterRoleBindingCacheToAdminBinding(t *testing.T) {
 	}
 }
 
-func TestTransformNamespaceKeepsOnlySecurityLabels(t *testing.T) {
+func TestTransformNamespaceKeepsSecurityAndOwnerMetadata(t *testing.T) {
 	namespace := &metav1.PartialObjectMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "ns-user-a",
 			ResourceVersion: "42",
 			Labels: map[string]string{
 				config.PodSecurityLabelPrefix + "enforce": "baseline",
+				userv1.UserLabelOwnerKey:                  "owner-a",
 				"unused.example/label":                    "unused",
 			},
-			Annotations:   map[string]string{"unused.example/annotation": "unused"},
+			Annotations: map[string]string{
+				userv1.UserAnnotationOwnerKey: "owner-a",
+				"unused.example/annotation":   "unused",
+			},
 			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
 		},
 	}
@@ -128,11 +132,13 @@ func TestTransformNamespaceKeepsOnlySecurityLabels(t *testing.T) {
 	}
 	wantLabels := map[string]string{
 		config.PodSecurityLabelPrefix + "enforce": "baseline",
+		userv1.UserLabelOwnerKey:                  "owner-a",
 	}
 	if !reflect.DeepEqual(got.Labels, wantLabels) {
 		t.Fatalf("labels = %#v, want %#v", got.Labels, wantLabels)
 	}
-	if len(got.Annotations) != 0 || len(got.ManagedFields) != 0 {
+	wantAnnotations := map[string]string{userv1.UserAnnotationOwnerKey: "owner-a"}
+	if !reflect.DeepEqual(got.Annotations, wantAnnotations) || len(got.ManagedFields) != 0 {
 		t.Fatalf("unused namespace metadata was retained: %#v", got.ObjectMeta)
 	}
 }

@@ -55,6 +55,11 @@ kubeAPI:
 adminClusterAdmin:
   enabled: false
 
+# Apply Pod Security labels to all ns-* namespaces, including orphan namespaces.
+# Disabling this leaves existing labels unchanged.
+strictNamespacePodSecurity:
+  enabled: true
+
 # Cloud API server configuration
 # cloudAPIServerDomain is auto-configured by entrypoint.sh from sealos-config ConfigMap
 cloudAPIServerDomain: 127.0.0.1.nip.io

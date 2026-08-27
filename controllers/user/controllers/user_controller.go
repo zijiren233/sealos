@@ -81,6 +81,10 @@ type UserReconciler struct {
 	// EnableAdminClusterAdmin preserves the legacy cluster-admin binding for
 	// the admin user when explicitly enabled. It is disabled by default.
 	EnableAdminClusterAdmin bool
+	// EnableStrictNamespacePodSecurity applies Pod Security labels to every
+	// namespace whose name starts with ns-, including namespaces without a User.
+	// It is enabled by default by the controller entrypoint.
+	EnableStrictNamespacePodSecurity bool
 }
 
 type userReconcileState struct {
@@ -114,6 +118,11 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	r.Logger.V(1).Info("start reconcile for users")
 	user := &userv1.User{}
 	if err := r.Get(ctx, req.NamespacedName, user); err != nil {
+		if apierrors.IsNotFound(err) && r.EnableStrictNamespacePodSecurity {
+			if syncErr := r.syncOrphanNamespace(ctx, config.GetUsersNamespace(req.Name)); syncErr != nil {
+				return ctrl.Result{}, syncErr
+			}
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -149,8 +158,8 @@ type OwnerAnnotationChangedPredicate struct {
 	predicate.Funcs
 }
 
-// NamespacePodSecurityPredicate only reconciles users when a managed
-// namespace's Pod Security Admission labels change.
+// NamespacePodSecurityPredicate reconciles ns-* namespaces when their
+// Pod Security Admission labels or User ownership metadata changes.
 type NamespacePodSecurityPredicate struct {
 	predicate.Funcs
 }
@@ -175,12 +184,20 @@ func (AdminClusterRoleBindingPredicate) Generic(event.GenericEvent) bool {
 	return false
 }
 
-func (NamespacePodSecurityPredicate) Create(event.CreateEvent) bool {
-	return false
+func (NamespacePodSecurityPredicate) Create(e event.CreateEvent) bool {
+	return isUserNamespace(e.Object.GetName())
 }
 
 func (NamespacePodSecurityPredicate) Update(e event.UpdateEvent) bool {
-	return podSecurityLabelsChanged(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels())
+	if !isUserNamespace(e.ObjectNew.GetName()) {
+		return false
+	}
+	return namespaceMetadataChanged(
+		e.ObjectOld.GetAnnotations(),
+		e.ObjectNew.GetAnnotations(),
+		e.ObjectOld.GetLabels(),
+		e.ObjectNew.GetLabels(),
+	)
 }
 
 func (NamespacePodSecurityPredicate) Delete(e event.DeleteEvent) bool {
@@ -205,6 +222,14 @@ func podSecurityLabelsChanged(oldLabels, newLabels map[string]string) bool {
 	return false
 }
 
+func namespaceMetadataChanged(
+	oldAnnotations, newAnnotations, oldLabels, newLabels map[string]string,
+) bool {
+	return podSecurityLabelsChanged(oldLabels, newLabels) ||
+		oldAnnotations[userv1.UserAnnotationOwnerKey] != newAnnotations[userv1.UserAnnotationOwnerKey] ||
+		oldLabels[userv1.UserLabelOwnerKey] != newLabels[userv1.UserLabelOwnerKey]
+}
+
 func isUserNamespace(name string) bool {
 	return strings.HasPrefix(name, "ns-") && len(name) > len("ns-")
 }
@@ -216,6 +241,31 @@ func (r *UserReconciler) namespaceToUserRequests(_ context.Context, obj client.O
 	return []ctrl.Request{{NamespacedName: client.ObjectKey{
 		Name: config.GetUserNameByNamespace(obj.GetName()),
 	}}}
+}
+
+func (r *UserReconciler) syncOrphanNamespace(ctx context.Context, namespaceName string) error {
+	if !r.EnableStrictNamespacePodSecurity || !isUserNamespace(namespaceName) {
+		return nil
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		ns := &v1.Namespace{}
+		if err := r.Get(ctx, client.ObjectKey{Name: namespaceName}, ns); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
+			if ns.Labels == nil {
+				ns.Labels = make(map[string]string)
+			}
+			ns.Labels = config.SetPodSecurity(ns.Labels)
+			return nil
+		}); err != nil {
+			return fmt.Errorf("unable to apply Pod Security labels to orphan namespace %s: %w", namespaceName, err)
+		}
+		return nil
+	})
 }
 
 func (r *UserReconciler) adminClusterRoleBindingToUserRequests(_ context.Context, obj client.Object) []ctrl.Request {
@@ -290,8 +340,13 @@ func NewControllerRestartPredicate(duration time.Duration) *ControllerRestartPre
 	}
 }
 
-// skip create event p.duration ago
+// Skip old create events for unrelated resources. Existing ns-* namespaces
+// must still be processed after restart so labels and ownership can recover.
 func (p *ControllerRestartPredicate) Create(e event.CreateEvent) bool {
+	if isUserNamespace(e.Object.GetName()) &&
+		e.Object.GetObjectKind().GroupVersionKind().Kind == "Namespace" {
+		return true
+	}
 	return e.Object.GetCreationTimestamp().After(p.checkTime)
 }
 

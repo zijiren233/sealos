@@ -76,6 +76,7 @@ func main() {
 		secureMetrics              bool
 		enableHTTP2                bool
 		enableAdminClusterAdmin    bool
+		enableStrictNamespacePSA   bool
 		tlsOpts                    []func(*tls.Config)
 	)
 	flag.StringVar(
@@ -154,6 +155,12 @@ func main() {
 		"enable-admin-cluster-admin",
 		false,
 		"Preserve the legacy cluster-admin binding and privileged admin namespace labels.",
+	)
+	flag.BoolVar(
+		&enableStrictNamespacePSA,
+		"enable-strict-namespace-pod-security",
+		true,
+		"Apply Pod Security labels to all ns-* namespaces, including namespaces without a Sealos User.",
 	)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
 	opts := zap.Options{
@@ -248,7 +255,8 @@ func main() {
 	}
 
 	if err = (&controllers.UserReconciler{
-		EnableAdminClusterAdmin: enableAdminClusterAdmin,
+		EnableAdminClusterAdmin:          enableAdminClusterAdmin,
+		EnableStrictNamespacePodSecurity: enableStrictNamespacePSA,
 	}).SetupWithManager(
 		mgr,
 		rateLimiterOptions,
