@@ -21,6 +21,7 @@ import (
 	"time"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	"github.com/labring/sealos/controllers/user/controllers/helper"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -31,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
@@ -47,6 +49,32 @@ func (c namespaceCreateErrorClient) Create(
 		return errors.New("namespace create failed")
 	}
 	return c.Client.Create(ctx, obj, opts...)
+}
+
+type roleSyncErrorClient struct {
+	client.Client
+}
+
+func (c roleSyncErrorClient) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
+	if _, ok := obj.(*rbacv1.Role); ok {
+		return errors.New("role create failed")
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c roleSyncErrorClient) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.UpdateOption,
+) error {
+	if _, ok := obj.(*rbacv1.Role); ok {
+		return errors.New("role update failed")
+	}
+	return c.Client.Update(ctx, obj, opts...)
 }
 
 func TestUpdateStatusPreservesUncachedKubeConfig(t *testing.T) {
@@ -154,16 +182,36 @@ func TestNamespacePodSecurityPredicate(t *testing.T) {
 		t.Fatal("owner label change did not trigger reconciliation")
 	}
 
+	newNamespace = oldNamespace.DeepCopy()
+	newNamespace.Annotations = map[string]string{userv1.UserAnnotationCreatorKey: "user-a"}
+	if !p.Update(event.UpdateEvent{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("creator annotation change did not trigger reconciliation")
+	}
+
+	newNamespace = oldNamespace.DeepCopy()
+	newNamespace.OwnerReferences = []metav1.OwnerReference{{Name: "user-a"}}
+	if !p.Update(event.UpdateEvent{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("owner reference change did not trigger reconciliation")
+	}
+
 	if !p.Create(event.CreateEvent{Object: oldNamespace}) {
 		t.Fatal("ns-* namespace creation did not trigger reconciliation")
 	}
-	if p.Create(event.CreateEvent{Object: &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}}}) {
+	if p.Create(event.CreateEvent{
+		Object: &metav1.PartialObjectMetadata{
+			ObjectMeta: metav1.ObjectMeta{Name: "kube-system"},
+		},
+	}) {
 		t.Fatal("unmanaged namespace creation triggered reconciliation")
 	}
 	if !p.Delete(event.DeleteEvent{Object: oldNamespace}) {
 		t.Fatal("managed namespace deletion did not trigger reconciliation")
 	}
-	if p.Delete(event.DeleteEvent{Object: &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}}}) {
+	if p.Delete(event.DeleteEvent{
+		Object: &metav1.PartialObjectMetadata{
+			ObjectMeta: metav1.ObjectMeta{Name: "kube-system"},
+		},
+	}) {
 		t.Fatal("unmanaged namespace deletion triggered reconciliation")
 	}
 }
@@ -180,6 +228,408 @@ func TestControllerRestartPredicateKeepsExistingUserNamespaces(t *testing.T) {
 	p := NewControllerRestartPredicate(time.Hour)
 	if !p.Create(event.CreateEvent{Object: oldNamespace}) {
 		t.Fatal("existing ns-* namespace create event was filtered")
+	}
+}
+
+func TestControllerRestartPredicateEnqueuesHistoricalUsers(t *testing.T) {
+	t.Parallel()
+	oldUser := &userv1.User{ObjectMeta: metav1.ObjectMeta{
+		Name:              "alice",
+		CreationTimestamp: metav1.NewTime(time.Now().Add(-24 * time.Hour)),
+	}}
+	p := NewControllerRestartPredicate(time.Hour)
+	if !p.Create(event.CreateEvent{Object: oldUser}) {
+		t.Fatal("historical user was filtered before reconcile")
+	}
+
+	deletingUser := oldUser.DeepCopy()
+	deletingAt := metav1.Now()
+	deletingUser.DeletionTimestamp = &deletingAt
+	if !p.Create(event.CreateEvent{Object: deletingUser}) {
+		t.Fatal("historical deleting user was filtered")
+	}
+}
+
+func TestCachedUserRequeueUsesStableDeadline(t *testing.T) {
+	t.Parallel()
+	r := &UserReconciler{
+		minRequeueDuration: time.Hour,
+		maxRequeueDuration: time.Hour,
+	}
+	r.recordKubeConfigSync("alice", time.Hour, false)
+	firstValue, ok := r.nextKubeConfigSync.Load("alice")
+	if !ok {
+		t.Fatal("initial kubeconfig deadline was not recorded")
+	}
+	first, ok := firstValue.(time.Time)
+	if !ok {
+		t.Fatalf("initial kubeconfig deadline type = %T", firstValue)
+	}
+	r.recordKubeConfigSync("alice", time.Hour, false)
+	secondValue, ok := r.nextKubeConfigSync.Load("alice")
+	second, secondOK := secondValue.(time.Time)
+	if !ok || !secondOK || !second.Equal(first) {
+		t.Fatalf(
+			"unrelated reconcile moved kubeconfig deadline: first=%s second=%v",
+			first,
+			secondValue,
+		)
+	}
+	r.recordKubeConfigSync("alice", time.Hour, true)
+	thirdValue, ok := r.nextKubeConfigSync.Load("alice")
+	third, thirdOK := thirdValue.(time.Time)
+	if !ok || !thirdOK {
+		t.Fatalf("updated kubeconfig deadline type = %T", thirdValue)
+	}
+	if !third.After(first) {
+		t.Fatalf("kubeconfig sync did not reset deadline: first=%s third=%s", first, third)
+	}
+}
+
+func TestKubeConfigSyncDueUsesPersistedRefreshAt(t *testing.T) {
+	t.Parallel()
+	r := &UserReconciler{}
+	future := metav1.NewTime(time.Now().Add(time.Hour))
+	user := &userv1.User{ObjectMeta: metav1.ObjectMeta{Name: "alice"}, Status: userv1.UserStatus{
+		KubeConfigRefreshAt: &future,
+	}}
+	if r.kubeConfigSyncDue(user) {
+		t.Fatal("future persisted refresh time was considered due")
+	}
+	past := metav1.NewTime(time.Now().Add(-time.Second))
+	user.Status.KubeConfigRefreshAt = &past
+	if !r.kubeConfigSyncDue(user) {
+		t.Fatal("past persisted refresh time was not considered due")
+	}
+	user.Status.KubeConfigRefreshAt = nil
+	if !r.kubeConfigSyncDue(user) {
+		t.Fatal("missing persisted refresh time was not considered due")
+	}
+}
+
+func TestCSRExpirationStatusMatchingUsesMinimumForLowValues(t *testing.T) {
+	t.Parallel()
+	minimum := userv1.DefaultCSRExpirationSeconds
+	if !csrExpirationStatusMatches(7_200, 0) {
+		t.Fatal("low spec and empty observed expiration should use the minimum")
+	}
+	if !csrExpirationStatusMatches(7_200, minimum) {
+		t.Fatal("low spec and minimum observed expiration should match")
+	}
+	if csrExpirationStatusMatches(7_200, minimum+1) {
+		t.Fatal("low spec should not match a different above-minimum observed expiration")
+	}
+	if csrExpirationStatusMatches(minimum+1, 7_200) {
+		t.Fatal("spec above minimum should detect a different effective expiration")
+	}
+	if !csrExpirationStatusMatches(minimum+1, minimum+1) {
+		t.Fatal("equal above-minimum expirations should match")
+	}
+}
+
+func TestUserStatusNeedsSyncIgnoresBelowMinimumExpirationDrift(t *testing.T) {
+	t.Parallel()
+	user := &userv1.User{
+		ObjectMeta: metav1.ObjectMeta{Name: "alice", Generation: 1},
+		Spec:       userv1.UserSpec{CSRExpirationSeconds: 7_200},
+		Status: userv1.UserStatus{
+			Phase:                        userv1.UserActive,
+			ObservedGeneration:           1,
+			ObservedCSRExpirationSeconds: 7_200,
+			Conditions: []userv1.Condition{
+				{Type: userv1.Initialized, Status: corev1.ConditionTrue},
+				{Type: userv1.Ready, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+	if userStatusNeedsSync(user) {
+		t.Fatal("below-minimum expiration drift triggered a status sync")
+	}
+	if user.Status.ObservedCSRExpirationSeconds != 7_200 {
+		t.Fatalf(
+			"observed expiration was normalized outside a kubeconfig refresh: %d",
+			user.Status.ObservedCSRExpirationSeconds,
+		)
+	}
+}
+
+func TestSetObservedCSRExpirationSecondsNormalizesOnlyDuringRefresh(t *testing.T) {
+	t.Parallel()
+	user := &userv1.User{
+		Spec: userv1.UserSpec{CSRExpirationSeconds: 7_200},
+		Status: userv1.UserStatus{
+			ObservedCSRExpirationSeconds: 7_200,
+		},
+	}
+	setObservedCSRExpirationSeconds(user)
+	if user.Status.ObservedCSRExpirationSeconds != userv1.DefaultCSRExpirationSeconds {
+		t.Fatalf(
+			"observed expiration = %d, want minimum %d",
+			user.Status.ObservedCSRExpirationSeconds,
+			userv1.DefaultCSRExpirationSeconds,
+		)
+	}
+
+	user.Spec.CSRExpirationSeconds = userv1.DefaultCSRExpirationSeconds + 1
+	setObservedCSRExpirationSeconds(user)
+	want := userv1.DefaultCSRExpirationSeconds + 1
+	if user.Status.ObservedCSRExpirationSeconds != want {
+		t.Fatalf(
+			"observed expiration = %d, want %d",
+			user.Status.ObservedCSRExpirationSeconds,
+			want,
+		)
+	}
+}
+
+func TestFailedKubeConfigSyncClearsDeadline(t *testing.T) {
+	t.Parallel()
+	r := &UserReconciler{}
+	r.recordKubeConfigSync("alice", time.Hour, true)
+	state := &userReconcileState{kubeConfigSyncAttempted: true}
+	state.recordSyncError(errors.New("token request failed"))
+	if err := r.finishKubeConfigSync("alice", state, time.Hour); err == nil {
+		t.Fatal("failed kubeconfig sync did not return its error")
+	}
+	if _, ok := r.nextKubeConfigSync.Load("alice"); ok {
+		t.Fatal("failed kubeconfig sync retained a future deadline")
+	}
+}
+
+func TestUserResourcesNeedSyncFromReader(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add rbac scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	user := &userv1.User{ObjectMeta: metav1.ObjectMeta{
+		Name:        "alice",
+		UID:         "user-a",
+		Annotations: map[string]string{userv1.UserAnnotationOwnerKey: "owner-a"},
+	}}
+	ownerRef := metav1.OwnerReference{
+		APIVersion: userv1.GroupVersion.String(),
+		Kind:       "User",
+		Name:       user.Name,
+		UID:        user.UID,
+		Controller: &controller,
+	}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: config.GetUsersNamespace(user.Name),
+			Annotations: map[string]string{
+				userv1.UserAnnotationCreatorKey: user.Name,
+				userv1.UserAnnotationOwnerKey:   "owner-a",
+			},
+			Labels: config.SetPodSecurity(
+				map[string]string{userv1.UserLabelOwnerKey: "owner-a"},
+			),
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
+		},
+	}
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+		Name:      user.Name,
+		Namespace: config.GetUserSystemNamespace(),
+		Annotations: map[string]string{
+			userv1.UserAnnotationCreatorKey: user.Name,
+			userv1.UserAnnotationOwnerKey:   "owner-a",
+		},
+		OwnerReferences: []metav1.OwnerReference{ownerRef},
+	}, Secrets: []corev1.ObjectReference{{Name: "token-alice"}}}
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name: "token-alice", Namespace: config.GetUserSystemNamespace(),
+		Annotations:     map[string]string{corev1.ServiceAccountNameKey: user.Name},
+		OwnerReferences: []metav1.OwnerReference{ownerRef},
+	}}
+	objects := make([]client.Object, 0, 8)
+	objects = append(objects, user, ns, sa, secret)
+	for _, roleType := range []userv1.RoleType{userv1.OwnerRoleType, userv1.ManagerRoleType, userv1.DeveloperRoleType} {
+		objects = append(objects, &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{
+			Name:      string(roleType),
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				userv1.UserAnnotationCreatorKey: user.Name,
+				userv1.UserAnnotationOwnerKey:   "owner-a",
+			},
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
+		}, Rules: config.GetUserRole(roleType)})
+	}
+	objects = append(objects, &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      user.Name,
+			Namespace: ns.Name,
+			Annotations: map[string]string{
+				userv1.UserAnnotationCreatorKey: user.Name,
+				userv1.UserAnnotationOwnerKey:   "owner-a",
+			},
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     string(userv1.OwnerRoleType),
+		},
+		Subjects: config.GetUsersSubject(user.Name),
+	})
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	withFinalizer := user.DeepCopy()
+	withFinalizer.Finalizers = []string{userFinalizerName}
+	withFinalizer.Status = userv1.UserStatus{
+		Phase:              userv1.UserActive,
+		ObservedGeneration: withFinalizer.Generation,
+		Conditions: []userv1.Condition{
+			{Type: userv1.Initialized, Status: corev1.ConditionTrue},
+			{Type: userv1.Ready, Status: corev1.ConditionTrue},
+		},
+	}
+	if !controllerutil.ContainsFinalizer(withFinalizer, userFinalizerName) {
+		t.Fatal("test user finalizer was not configured")
+	}
+	namespace := &corev1.Namespace{}
+	if err := reader.Get(
+		context.Background(),
+		client.ObjectKey{Name: ns.Name},
+		namespace,
+	); err != nil {
+		t.Fatalf("get namespace: %v", err)
+	}
+	partialNamespace := &metav1.PartialObjectMetadata{ObjectMeta: namespace.ObjectMeta}
+	if !namespaceMatchesUser(partialNamespace, user, false) {
+		t.Fatal("healthy namespace did not match user")
+	}
+	serviceAccount := &corev1.ServiceAccount{}
+	if err := reader.Get(
+		context.Background(),
+		client.ObjectKey{Name: user.Name, Namespace: config.GetUserSystemNamespace()},
+		serviceAccount,
+	); err != nil {
+		t.Fatalf("get service account: %v", err)
+	}
+	if !metadataMatchesUserResource(serviceAccount, user) {
+		t.Fatal("healthy service account did not match user")
+	}
+	if !controlledByUser(secret, user) ||
+		secret.Annotations[corev1.ServiceAccountNameKey] != user.Name {
+		t.Fatal("healthy bound secret did not match user")
+	}
+	for _, roleType := range []userv1.RoleType{userv1.OwnerRoleType, userv1.ManagerRoleType, userv1.DeveloperRoleType} {
+		if !roleMatchesUser(
+			context.Background(),
+			reader,
+			client.ObjectKey{Name: string(roleType), Namespace: ns.Name},
+			roleType,
+			user,
+		) {
+			t.Fatalf("healthy %s role did not match user", roleType)
+		}
+	}
+	roleBinding := &rbacv1.RoleBinding{}
+	if err := reader.Get(
+		context.Background(),
+		client.ObjectKey{Name: user.Name, Namespace: ns.Name},
+		roleBinding,
+	); err != nil {
+		t.Fatalf("get role binding: %v", err)
+	}
+	if !roleBindingMatchesUser(roleBinding, user) {
+		t.Fatal("healthy role binding did not match user")
+	}
+	role := &rbacv1.Role{}
+	if err := reader.Get(
+		context.Background(),
+		client.ObjectKey{Name: string(userv1.DeveloperRoleType), Namespace: ns.Name},
+		role,
+	); err != nil {
+		t.Fatalf("get developer role: %v", err)
+	}
+	role.Rules = []rbacv1.PolicyRule{
+		{APIGroups: []string{"*"}, Resources: []string{"pods"}, Verbs: []string{"get"}},
+	}
+	if err := reader.Update(context.Background(), role); err != nil {
+		t.Fatalf("update developer role: %v", err)
+	}
+	if roleMatchesUser(
+		context.Background(),
+		reader,
+		client.ObjectKey{Name: string(userv1.DeveloperRoleType), Namespace: ns.Name},
+		userv1.DeveloperRoleType,
+		user,
+	) {
+		t.Fatal("developer role rule drift was not detected")
+	}
+	role.Rules = config.GetUserRole(userv1.DeveloperRoleType)
+	if err := reader.Update(context.Background(), role); err != nil {
+		t.Fatalf("restore developer role: %v", err)
+	}
+
+	storedNamespace := &corev1.Namespace{}
+	if err := reader.Get(
+		context.Background(),
+		client.ObjectKey{Name: ns.Name},
+		storedNamespace,
+	); err != nil {
+		t.Fatalf("get namespace: %v", err)
+	}
+	storedNamespace.Annotations[userv1.UserAnnotationOwnerKey] = "owner-b"
+	if err := reader.Update(context.Background(), storedNamespace); err != nil {
+		t.Fatalf("update namespace: %v", err)
+	}
+	partialNamespace.Annotations = storedNamespace.Annotations
+	if namespaceMatchesUser(partialNamespace, user, false) {
+		t.Fatal("namespace metadata drift was not detected")
+	}
+	storedNamespace.Annotations[userv1.UserAnnotationOwnerKey] = "owner-a"
+	if err := reader.Update(context.Background(), storedNamespace); err != nil {
+		t.Fatalf("restore namespace: %v", err)
+	}
+
+	if err := reader.Delete(context.Background(), secret); err != nil {
+		t.Fatalf("delete bound secret: %v", err)
+	}
+	if err := reader.Get(
+		context.Background(),
+		client.ObjectKey{Name: secret.Name, Namespace: secret.Namespace},
+		&corev1.Secret{},
+	); err == nil {
+		t.Fatal("bound secret drift was not applied")
+	}
+}
+
+func TestRoleSyncFailureUpdatesRoleCondition(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add RBAC scheme: %v", err)
+	}
+	user := &userv1.User{
+		ObjectMeta: metav1.ObjectMeta{Name: "alice", UID: "user-a"},
+	}
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(user).Build()
+	r := &UserReconciler{
+		Client:   roleSyncErrorClient{Client: baseClient},
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+	r.syncRolesIfNeeded(context.Background(), user)
+	condition := helper.GetCondition(
+		user.Status.Conditions,
+		&userv1.Condition{Type: roleSyncReadyCondition},
+	)
+	if condition.Status != corev1.ConditionFalse {
+		t.Fatalf("role condition status = %s, want False", condition.Status)
+	}
+	if condition.Reason != "SyncUserError" {
+		t.Fatalf("role condition reason = %q, want SyncUserError", condition.Reason)
 	}
 }
 
@@ -214,14 +664,18 @@ func TestReconcileStrictNamespacePodSecurity(t *testing.T) {
 	}}
 	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns).Build()
 	r := &UserReconciler{Client: cli, EnableStrictNamespacePodSecurity: true}
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKey{Name: "external"}}); err != nil {
+	if _, err := r.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: client.ObjectKey{Name: "external"}},
+	); err != nil {
 		t.Fatalf("reconcile orphan namespace: %v", err)
 	}
 	got := &corev1.Namespace{}
 	if err := cli.Get(context.Background(), client.ObjectKey{Name: ns.Name}, got); err != nil {
 		t.Fatalf("get orphan namespace: %v", err)
 	}
-	if got.Labels[config.PodSecurityLabelPrefix+"enforce"] != "baseline" || got.Labels["example.com/keep"] != "value" {
+	if got.Labels[config.PodSecurityLabelPrefix+"enforce"] != "baseline" ||
+		got.Labels["example.com/keep"] != "value" {
 		t.Fatalf("orphan namespace labels = %#v", got.Labels)
 	}
 }
@@ -241,7 +695,10 @@ func TestReconcileDisabledStrictNamespacePodSecurityPreservesOrphanLabels(t *tes
 	}}
 	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns).Build()
 	r := &UserReconciler{Client: cli}
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKey{Name: "external"}}); err != nil {
+	if _, err := r.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: client.ObjectKey{Name: "external"}},
+	); err != nil {
 		t.Fatalf("reconcile orphan namespace with strict mode disabled: %v", err)
 	}
 	got := &corev1.Namespace{}
@@ -256,12 +713,18 @@ func TestReconcileDisabledStrictNamespacePodSecurityPreservesOrphanLabels(t *tes
 func TestAdminClusterRoleBindingPredicate(t *testing.T) {
 	t.Parallel()
 	p := AdminClusterRoleBindingPredicate{}
-	target := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName}}
+	target := &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName},
+	}
 	other := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "other-binding"}}
-	if !p.Create(event.CreateEvent{Object: target}) || !p.Update(event.UpdateEvent{ObjectNew: target}) || !p.Delete(event.DeleteEvent{Object: target}) {
+	if !p.Create(event.CreateEvent{Object: target}) ||
+		!p.Update(event.UpdateEvent{ObjectNew: target}) ||
+		!p.Delete(event.DeleteEvent{Object: target}) {
 		t.Fatal("admin cluster role binding events were not accepted")
 	}
-	if p.Create(event.CreateEvent{Object: other}) || p.Update(event.UpdateEvent{ObjectNew: other}) || p.Delete(event.DeleteEvent{Object: other}) {
+	if p.Create(event.CreateEvent{Object: other}) ||
+		p.Update(event.UpdateEvent{ObjectNew: other}) ||
+		p.Delete(event.DeleteEvent{Object: other}) {
 		t.Fatal("unrelated cluster role binding event was accepted")
 	}
 }
@@ -274,7 +737,9 @@ func TestDesiredNamespaceLabels(t *testing.T) {
 	}
 	adminLabels := desiredNamespaceLabels("ns-admin", labels, false)
 	if adminLabels[config.PodSecurityLabelPrefix+"enforce"] != "baseline" {
-		t.Fatal("admin namespace did not receive Pod Security labels when admin privilege is disabled")
+		t.Fatal(
+			"admin namespace did not receive Pod Security labels when admin privilege is disabled",
+		)
 	}
 	privilegedLabels := desiredNamespaceLabels("ns-admin", adminLabels, true)
 	if _, ok := privilegedLabels[config.PodSecurityLabelPrefix+"enforce"]; ok {
@@ -291,14 +756,93 @@ func TestAdminClusterRoleBindingCleanup(t *testing.T) {
 	if err := rbacv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add RBAC scheme: %v", err)
 	}
-	binding := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName}}
+	binding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName},
+	}
 	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(binding).Build()
 	cleanup := &adminPrivilegeMigration{client: cli}
 	if err := cleanup.Start(context.Background()); err != nil {
 		t.Fatalf("cleanup binding: %v", err)
 	}
-	if err := cli.Get(context.Background(), client.ObjectKey{Name: adminClusterRoleBindingName}, &rbacv1.ClusterRoleBinding{}); !apierrors.IsNotFound(err) {
+	if err := cli.Get(
+		context.Background(),
+		client.ObjectKey{Name: adminClusterRoleBindingName},
+		&rbacv1.ClusterRoleBinding{},
+	); !apierrors.IsNotFound(
+		err,
+	) {
 		t.Fatalf("binding still exists, get error = %v", err)
+	}
+}
+
+func TestReconcileMissingAdminCleansDisabledClusterRoleBinding(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		enableAdmin   bool
+		bindingExists bool
+		wantBinding   bool
+	}{
+		{
+			name:          "disabled admin privilege removes binding",
+			bindingExists: true,
+		},
+		{
+			name: "disabled admin privilege tolerates missing binding",
+		},
+		{
+			name:          "enabled admin privilege preserves binding",
+			enableAdmin:   true,
+			bindingExists: true,
+			wantBinding:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			scheme := runtime.NewScheme()
+			if err := rbacv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add RBAC scheme: %v", err)
+			}
+			if err := userv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add user scheme: %v", err)
+			}
+
+			var objects []client.Object
+			if tt.bindingExists {
+				objects = append(objects, &rbacv1.ClusterRoleBinding{
+					ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName},
+				})
+			}
+			cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			r := &UserReconciler{
+				Client:                  cli,
+				EnableAdminClusterAdmin: tt.enableAdmin,
+			}
+
+			if _, err := r.Reconcile(context.Background(), ctrl.Request{
+				NamespacedName: client.ObjectKey{Name: adminUserName},
+			}); err != nil {
+				t.Fatalf("reconcile missing admin: %v", err)
+			}
+
+			err := cli.Get(
+				context.Background(),
+				client.ObjectKey{Name: adminClusterRoleBindingName},
+				&rbacv1.ClusterRoleBinding{},
+			)
+			if tt.wantBinding {
+				if err != nil {
+					t.Fatalf("get preserved binding: %v", err)
+				}
+				return
+			}
+			if !apierrors.IsNotFound(err) {
+				t.Fatalf("binding was not removed, get error = %v", err)
+			}
+		})
 	}
 }
 
@@ -316,8 +860,11 @@ func TestAdminPrivilegeMigrationDisablesLegacyBinding(t *testing.T) {
 	}
 	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
 		&userv1.User{ObjectMeta: metav1.ObjectMeta{Name: adminUserName}},
-		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName}},
-	).Build()
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName},
+		},
+	).
+		Build()
 	r := &UserReconciler{Client: cli, Scheme: scheme}
 	migration := &adminPrivilegeMigration{
 		client:     cli,
@@ -327,11 +874,21 @@ func TestAdminPrivilegeMigrationDisablesLegacyBinding(t *testing.T) {
 	if err := migration.Start(context.Background()); err != nil {
 		t.Fatalf("disable admin privilege: %v", err)
 	}
-	if err := cli.Get(context.Background(), client.ObjectKey{Name: adminClusterRoleBindingName}, &rbacv1.ClusterRoleBinding{}); !apierrors.IsNotFound(err) {
+	if err := cli.Get(
+		context.Background(),
+		client.ObjectKey{Name: adminClusterRoleBindingName},
+		&rbacv1.ClusterRoleBinding{},
+	); !apierrors.IsNotFound(
+		err,
+	) {
 		t.Fatalf("legacy binding still exists, get error = %v", err)
 	}
 	ns := &corev1.Namespace{}
-	if err := cli.Get(context.Background(), client.ObjectKey{Name: config.GetUsersNamespace(adminUserName)}, ns); err != nil {
+	if err := cli.Get(
+		context.Background(),
+		client.ObjectKey{Name: config.GetUsersNamespace(adminUserName)},
+		ns,
+	); err != nil {
 		t.Fatalf("get admin namespace: %v", err)
 	}
 	if ns.Labels[config.PodSecurityLabelPrefix+"enforce"] != "baseline" {
@@ -364,11 +921,19 @@ func TestAdminPrivilegeMigrationEnablesLegacyBinding(t *testing.T) {
 	if err := migration.Start(context.Background()); err != nil {
 		t.Fatalf("enable admin privilege: %v", err)
 	}
-	if err := cli.Get(context.Background(), client.ObjectKey{Name: adminClusterRoleBindingName}, &rbacv1.ClusterRoleBinding{}); err != nil {
+	if err := cli.Get(
+		context.Background(),
+		client.ObjectKey{Name: adminClusterRoleBindingName},
+		&rbacv1.ClusterRoleBinding{},
+	); err != nil {
 		t.Fatalf("get restored binding: %v", err)
 	}
 	ns := &corev1.Namespace{}
-	if err := cli.Get(context.Background(), client.ObjectKey{Name: config.GetUsersNamespace(adminUserName)}, ns); err != nil {
+	if err := cli.Get(
+		context.Background(),
+		client.ObjectKey{Name: config.GetUsersNamespace(adminUserName)},
+		ns,
+	); err != nil {
 		t.Fatalf("get admin namespace: %v", err)
 	}
 	if _, ok := ns.Labels[config.PodSecurityLabelPrefix+"enforce"]; ok {

@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	config2 "github.com/labring/sealos/controllers/user/controllers/helper/config"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +29,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestNewConfigNormalizesBelowMinimumExpiration(t *testing.T) {
+	t.Parallel()
+
+	cfg := NewConfig("alice", "", 7_200)
+	if cfg.expirationSeconds != userv1.DefaultCSRExpirationSeconds {
+		t.Fatalf(
+			"config expiration = %d, want minimum %d",
+			cfg.expirationSeconds,
+			userv1.DefaultCSRExpirationSeconds,
+		)
+	}
+	sac := cfg.WithServiceAccountConfig("user-system", nil)
+	if got := sac.tokenRequestExpirationSeconds(); got != userv1.DefaultCSRExpirationSeconds {
+		t.Fatalf(
+			"token request expiration = %d, want minimum %d",
+			got,
+			userv1.DefaultCSRExpirationSeconds,
+		)
+	}
+}
 
 func TestCleanupLegacyBoundTokenSecrets(t *testing.T) {
 	t.Parallel()

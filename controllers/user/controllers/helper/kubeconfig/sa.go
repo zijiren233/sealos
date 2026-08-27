@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 
+	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	config2 "github.com/labring/sealos/controllers/user/controllers/helper/config"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	v1 "k8s.io/api/core/v1"
@@ -211,10 +212,7 @@ func (sac *ServiceAccountConfig) requestToken(
 }
 
 func (sac *ServiceAccountConfig) tokenRequestExpirationSeconds() int32 {
-	if sac.expirationSeconds < defaultCSRExpirationSeconds {
-		return defaultCSRExpirationSeconds
-	}
-	return sac.expirationSeconds
+	return userv1.NormalizeCSRExpirationSeconds(sac.expirationSeconds)
 }
 
 func TokenSecretName(name string) string {
