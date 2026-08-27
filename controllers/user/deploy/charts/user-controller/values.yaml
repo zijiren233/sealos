@@ -49,6 +49,12 @@ kubeAPI:
   qps: 50
   burst: 100
 
+# Preserve the legacy cluster-admin binding for the admin user.
+# When disabled, the admin namespace uses Pod Security Admission labels and
+# any sealos-cloudadmin ClusterRoleBinding is removed.
+adminClusterAdmin:
+  enabled: false
+
 # Cloud API server configuration
 # cloudAPIServerDomain is auto-configured by entrypoint.sh from sealos-config ConfigMap
 cloudAPIServerDomain: 127.0.0.1.nip.io

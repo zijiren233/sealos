@@ -24,6 +24,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
+// AdminClusterRoleBindingName is the legacy cluster-admin binding for admin.
+const AdminClusterRoleBindingName = "sealos-cloudadmin"
+
 func GetUserSystemNamespace() string {
 	return "user-system"
 }

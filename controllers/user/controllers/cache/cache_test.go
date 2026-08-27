@@ -22,7 +22,9 @@ import (
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -82,6 +84,56 @@ func TestOptionsLimitNamespacedMetadataCaches(t *testing.T) {
 		if !found {
 			t.Fatalf("%T cache options not found", required)
 		}
+	}
+}
+
+func TestOptionsLimitsClusterRoleBindingCacheToAdminBinding(t *testing.T) {
+	options := Options(nil)
+	var byObject ctrlcache.ByObject
+	for obj, candidate := range options.ByObject {
+		if reflect.TypeOf(obj) == reflect.TypeOf(&rbacv1.ClusterRoleBinding{}) {
+			byObject = candidate
+			break
+		}
+	}
+	if byObject.Field == nil {
+		t.Fatal("cluster role binding cache options not found")
+	}
+	if byObject.Field.String() != "metadata.name="+config.AdminClusterRoleBindingName {
+		t.Fatalf("cluster role binding field selector = %v", byObject.Field)
+	}
+}
+
+func TestTransformNamespaceKeepsOnlySecurityLabels(t *testing.T) {
+	namespace := &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "ns-user-a",
+			ResourceVersion: "42",
+			Labels: map[string]string{
+				config.PodSecurityLabelPrefix + "enforce": "baseline",
+				"unused.example/label":                    "unused",
+			},
+			Annotations:   map[string]string{"unused.example/annotation": "unused"},
+			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
+		},
+	}
+
+	transformed, err := transformNamespace(namespace)
+	if err != nil {
+		t.Fatalf("transform namespace: %v", err)
+	}
+	got, ok := transformed.(*metav1.PartialObjectMetadata)
+	if !ok {
+		t.Fatalf("transformed type = %T, want *metav1.PartialObjectMetadata", transformed)
+	}
+	wantLabels := map[string]string{
+		config.PodSecurityLabelPrefix + "enforce": "baseline",
+	}
+	if !reflect.DeepEqual(got.Labels, wantLabels) {
+		t.Fatalf("labels = %#v, want %#v", got.Labels, wantLabels)
+	}
+	if len(got.Annotations) != 0 || len(got.ManagedFields) != 0 {
+		t.Fatalf("unused namespace metadata was retained: %#v", got.ObjectMeta)
 	}
 }
 

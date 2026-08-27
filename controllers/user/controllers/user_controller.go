@@ -38,6 +38,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apiMeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -57,10 +58,12 @@ import (
 )
 
 const (
-	userAnnotationCreatorKey = userv1.UserAnnotationCreatorKey
-	userAnnotationOwnerKey   = userv1.UserAnnotationOwnerKey
-	userLabelOwnerKey        = userv1.UserLabelOwnerKey
-	licenseLimitedCondition  = userv1.ConditionType("LicenseLimited")
+	userAnnotationCreatorKey    = userv1.UserAnnotationCreatorKey
+	userAnnotationOwnerKey      = userv1.UserAnnotationOwnerKey
+	userLabelOwnerKey           = userv1.UserLabelOwnerKey
+	licenseLimitedCondition     = userv1.ConditionType("LicenseLimited")
+	adminUserName               = "admin"
+	adminClusterRoleBindingName = config.AdminClusterRoleBindingName
 )
 
 // UserReconciler reconciles a User object
@@ -75,6 +78,9 @@ type UserReconciler struct {
 	finalizer          *finalizer.Finalizer
 	minRequeueDuration time.Duration
 	maxRequeueDuration time.Duration
+	// EnableAdminClusterAdmin preserves the legacy cluster-admin binding for
+	// the admin user when explicitly enabled. It is disabled by default.
+	EnableAdminClusterAdmin bool
 }
 
 type userReconcileState struct {
@@ -82,6 +88,14 @@ type userReconcileState struct {
 	tokenExpirationDeadline *metav1.Time
 	currentSecretName       string
 	cleanupLegacySecrets    bool
+	syncError               error
+}
+
+func (s *userReconcileState) recordSyncError(err error) {
+	if s == nil || err == nil {
+		return
+	}
+	s.syncError = errors.Join(s.syncError, err)
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=*
@@ -135,6 +149,135 @@ type OwnerAnnotationChangedPredicate struct {
 	predicate.Funcs
 }
 
+// NamespacePodSecurityPredicate only reconciles users when a managed
+// namespace's Pod Security Admission labels change.
+type NamespacePodSecurityPredicate struct {
+	predicate.Funcs
+}
+
+type AdminClusterRoleBindingPredicate struct {
+	predicate.Funcs
+}
+
+func (AdminClusterRoleBindingPredicate) Create(e event.CreateEvent) bool {
+	return e.Object.GetName() == adminClusterRoleBindingName
+}
+
+func (AdminClusterRoleBindingPredicate) Update(e event.UpdateEvent) bool {
+	return e.ObjectNew.GetName() == adminClusterRoleBindingName
+}
+
+func (AdminClusterRoleBindingPredicate) Delete(e event.DeleteEvent) bool {
+	return e.Object.GetName() == adminClusterRoleBindingName
+}
+
+func (AdminClusterRoleBindingPredicate) Generic(event.GenericEvent) bool {
+	return false
+}
+
+func (NamespacePodSecurityPredicate) Create(event.CreateEvent) bool {
+	return false
+}
+
+func (NamespacePodSecurityPredicate) Update(e event.UpdateEvent) bool {
+	return podSecurityLabelsChanged(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels())
+}
+
+func (NamespacePodSecurityPredicate) Delete(e event.DeleteEvent) bool {
+	return isUserNamespace(e.Object.GetName())
+}
+
+func (NamespacePodSecurityPredicate) Generic(event.GenericEvent) bool {
+	return false
+}
+
+func podSecurityLabelsChanged(oldLabels, newLabels map[string]string) bool {
+	for key := range oldLabels {
+		if config.IsPodSecurityLabel(key) && oldLabels[key] != newLabels[key] {
+			return true
+		}
+	}
+	for key := range newLabels {
+		if config.IsPodSecurityLabel(key) && oldLabels[key] != newLabels[key] {
+			return true
+		}
+	}
+	return false
+}
+
+func isUserNamespace(name string) bool {
+	return strings.HasPrefix(name, "ns-") && len(name) > len("ns-")
+}
+
+func (r *UserReconciler) namespaceToUserRequests(_ context.Context, obj client.Object) []ctrl.Request {
+	if !isUserNamespace(obj.GetName()) {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: client.ObjectKey{
+		Name: config.GetUserNameByNamespace(obj.GetName()),
+	}}}
+}
+
+func (r *UserReconciler) adminClusterRoleBindingToUserRequests(_ context.Context, obj client.Object) []ctrl.Request {
+	if obj.GetName() != adminClusterRoleBindingName {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: adminUserName}}}
+}
+
+func desiredNamespaceLabels(name string, labels map[string]string, enableAdminClusterAdmin bool) map[string]string {
+	if name == config.GetUsersNamespace(adminUserName) && enableAdminClusterAdmin {
+		for key := range labels {
+			if config.IsPodSecurityLabel(key) {
+				delete(labels, key)
+			}
+		}
+		return labels
+	}
+	return config.SetPodSecurity(labels)
+}
+
+type adminPrivilegeMigration struct {
+	client                  client.Client
+	reader                  client.Reader
+	reconciler              *UserReconciler
+	enableAdminClusterAdmin bool
+}
+
+func (c *adminPrivilegeMigration) Start(ctx context.Context) error {
+	if !c.enableAdminClusterAdmin {
+		binding := &rbacv1.ClusterRoleBinding{}
+		binding.Name = adminClusterRoleBindingName
+		if err := c.client.Delete(ctx, binding); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("remove disabled admin cluster role binding: %w", err)
+		}
+	}
+	if c.reconciler == nil {
+		return nil
+	}
+	admin := &userv1.User{}
+	if c.reader == nil {
+		return errors.New("admin user privilege migration reader is nil")
+	}
+	if err := c.reader.Get(ctx, client.ObjectKey{Name: adminUserName}, admin); err != nil {
+		if apierrors.IsNotFound(err) || apiMeta.IsNoMatchError(err) {
+			return nil
+		}
+		return fmt.Errorf("get admin user for privilege migration: %w", err)
+	}
+	state := &userReconcileState{}
+	c.reconciler.syncNamespace(ctx, admin, state)
+	c.reconciler.syncClusterRoleBinding(ctx, admin, state)
+	if state.syncError != nil {
+		return fmt.Errorf("sync admin privileges: %w", state.syncError)
+	}
+	return nil
+}
+
+func (c *adminPrivilegeMigration) NeedLeaderElection() bool {
+	return true
+}
+
 func (OwnerAnnotationChangedPredicate) Update(e event.UpdateEvent) bool {
 	return e.ObjectOld.GetAnnotations()[userAnnotationOwnerKey] !=
 		e.ObjectNew.GetAnnotations()[userAnnotationOwnerKey]
@@ -177,6 +320,15 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 	r.minRequeueDuration = minRequeueDuration
 	r.maxRequeueDuration = maxRequeueDuration
 
+	if err := mgr.Add(&adminPrivilegeMigration{
+		client:                  r.Client,
+		reader:                  mgr.GetAPIReader(),
+		reconciler:              r,
+		enableAdminClusterAdmin: r.EnableAdminClusterAdmin,
+	}); err != nil {
+		return fmt.Errorf("add admin privilege migration: %w", err)
+	}
+
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
 		&v1.Secret{},
@@ -210,6 +362,16 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 				predicate.GenerationChangedPredicate{},
 				OwnerAnnotationChangedPredicate{},
 			)),
+		).
+		WatchesMetadata(
+			&v1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(r.namespaceToUserRequests),
+			builder.WithPredicates(NamespacePodSecurityPredicate{}),
+		).
+		WatchesMetadata(
+			&rbacv1.ClusterRoleBinding{},
+			handler.EnqueueRequestsFromMapFunc(r.adminClusterRoleBindingToUserRequests),
+			builder.WithPredicates(AdminClusterRoleBindingPredicate{}),
 		).
 		Watches(
 			&licensev1.License{},
@@ -328,7 +490,7 @@ func (r *UserReconciler) initStatus(_ context.Context, user *userv1.User, _ *use
 func (r *UserReconciler) syncNamespace(
 	ctx context.Context,
 	user *userv1.User,
-	_ *userReconcileState,
+	state *userReconcileState,
 ) {
 	namespaceConditionType := userv1.ConditionType("NamespaceSyncReady")
 	nsCondition := &userv1.Condition{
@@ -370,15 +532,7 @@ func (r *UserReconciler) syncNamespace(
 			}
 			ns.Annotations[userAnnotationCreatorKey] = user.Name
 			ns.Annotations[userAnnotationOwnerKey] = user.Annotations[userAnnotationOwnerKey]
-			if ns.Name != "ns-admin" {
-				ns.Labels = config.SetPodSecurity(ns.Labels)
-			} else {
-				for k := range ns.Labels {
-					if strings.HasPrefix(k, "pod-security.") {
-						delete(ns.Labels, k)
-					}
-				}
-			}
+			ns.Labels = desiredNamespaceLabels(ns.Name, ns.Labels, r.EnableAdminClusterAdmin)
 			// add label for namespace to filter
 			ns.Labels[userLabelOwnerKey] = user.Annotations[userAnnotationOwnerKey]
 			ns.SetOwnerReferences([]metav1.OwnerReference{})
@@ -394,6 +548,7 @@ func (r *UserReconciler) syncNamespace(
 		)
 		return nil
 	}); err != nil {
+		state.recordSyncError(err)
 		helper.SetConditionError(nsCondition, "SyncUserError", err)
 		r.Recorder.Eventf(
 			user,
@@ -537,9 +692,9 @@ func (r *UserReconciler) syncRoleBinding(
 func (r *UserReconciler) syncClusterRoleBinding(
 	ctx context.Context,
 	user *userv1.User,
-	_ *userReconcileState,
+	state *userReconcileState,
 ) {
-	if user.Name != "admin" {
+	if user.Name != adminUserName {
 		return
 	}
 	roleBindingConditionType := userv1.ConditionType("ClusterRoleBindingSyncReady")
@@ -557,11 +712,31 @@ func (r *UserReconciler) syncClusterRoleBinding(
 			r.saveCondition(user, rbCondition.DeepCopy())
 		}
 	}()
+	if !r.EnableAdminClusterAdmin {
+		clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
+		clusterRoleBinding.Name = adminClusterRoleBindingName
+		if err := r.Delete(ctx, clusterRoleBinding); err != nil && !apierrors.IsNotFound(err) {
+			err = fmt.Errorf("unable to remove disabled admin cluster role binding: %w", err)
+			state.recordSyncError(err)
+			helper.SetConditionError(rbCondition, "SyncUserError", err)
+			r.Recorder.Eventf(
+				user,
+				v1.EventTypeWarning,
+				"syncUserClusterRoleBinding",
+				"Remove User admin cluster role binding %s is error: %v",
+				user.Name,
+				err,
+			)
+			return
+		}
+		rbCondition.Message = "admin cluster role binding disabled"
+		return
+	}
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var change controllerutil.OperationResult
 		var err error
 		clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
-		clusterRoleBinding.Name = "sealos-cloud" + user.Name
+		clusterRoleBinding.Name = adminClusterRoleBindingName
 		clusterRoleBinding.Labels = map[string]string{}
 		if change, err = controllerutil.CreateOrUpdate(
 			ctx,
@@ -595,6 +770,7 @@ func (r *UserReconciler) syncClusterRoleBinding(
 		)
 		return nil
 	}); err != nil {
+		state.recordSyncError(err)
 		helper.SetConditionError(rbCondition, "SyncUserError", err)
 		r.Recorder.Eventf(
 			user,

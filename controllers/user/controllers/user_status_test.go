@@ -16,15 +16,36 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	"github.com/labring/sealos/controllers/user/controllers/helper/config"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
+
+type namespaceCreateErrorClient struct {
+	client.Client
+}
+
+func (c namespaceCreateErrorClient) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
+	if _, ok := obj.(*corev1.Namespace); ok {
+		return errors.New("namespace create failed")
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
 
 func TestUpdateStatusPreservesUncachedKubeConfig(t *testing.T) {
 	t.Parallel()
@@ -94,6 +115,209 @@ func TestOwnerAnnotationChangedPredicate(t *testing.T) {
 	newUser.Annotations[userv1.UserAnnotationOwnerKey] = "owner-b"
 	if !predicate.Update(event.UpdateEvent{ObjectOld: oldUser, ObjectNew: newUser}) {
 		t.Fatal("owner annotation change did not trigger reconciliation")
+	}
+}
+
+func TestNamespacePodSecurityPredicate(t *testing.T) {
+	t.Parallel()
+
+	oldNamespace := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{
+		Name: "ns-user-a",
+		Labels: map[string]string{
+			config.PodSecurityLabelPrefix + "enforce": "baseline",
+		},
+	}}
+	newNamespace := oldNamespace.DeepCopy()
+	delete(newNamespace.Labels, config.PodSecurityLabelPrefix+"enforce")
+	p := NamespacePodSecurityPredicate{}
+	if !p.Update(event.UpdateEvent{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("Pod Security label deletion did not trigger reconciliation")
+	}
+
+	newNamespace = oldNamespace.DeepCopy()
+	newNamespace.Labels["unused.example/label"] = "changed"
+	if p.Update(event.UpdateEvent{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("unrelated label change triggered reconciliation")
+	}
+	if p.Create(event.CreateEvent{Object: oldNamespace}) {
+		t.Fatal("namespace create should be handled by user reconciliation")
+	}
+	if !p.Delete(event.DeleteEvent{Object: oldNamespace}) {
+		t.Fatal("managed namespace deletion did not trigger reconciliation")
+	}
+	if p.Delete(event.DeleteEvent{Object: &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}}}) {
+		t.Fatal("unmanaged namespace deletion triggered reconciliation")
+	}
+}
+
+func TestNamespaceToUserRequests(t *testing.T) {
+	t.Parallel()
+	r := &UserReconciler{}
+	requests := r.namespaceToUserRequests(context.Background(), &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{Name: "ns-admin"},
+	})
+	if len(requests) != 1 || requests[0].Name != "admin" {
+		t.Fatalf("admin namespace request = %#v", requests)
+	}
+	if requests := r.namespaceToUserRequests(context.Background(), &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{Name: "kube-system"},
+	}); requests != nil {
+		t.Fatalf("unmanaged namespace requests = %#v", requests)
+	}
+}
+
+func TestAdminClusterRoleBindingPredicate(t *testing.T) {
+	t.Parallel()
+	p := AdminClusterRoleBindingPredicate{}
+	target := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName}}
+	other := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "other-binding"}}
+	if !p.Create(event.CreateEvent{Object: target}) || !p.Update(event.UpdateEvent{ObjectNew: target}) || !p.Delete(event.DeleteEvent{Object: target}) {
+		t.Fatal("admin cluster role binding events were not accepted")
+	}
+	if p.Create(event.CreateEvent{Object: other}) || p.Update(event.UpdateEvent{ObjectNew: other}) || p.Delete(event.DeleteEvent{Object: other}) {
+		t.Fatal("unrelated cluster role binding event was accepted")
+	}
+}
+
+func TestDesiredNamespaceLabels(t *testing.T) {
+	t.Parallel()
+	labels := map[string]string{
+		config.PodSecurityLabelPrefix + "enforce": "baseline",
+		"example.com/keep":                        "value",
+	}
+	adminLabels := desiredNamespaceLabels("ns-admin", labels, false)
+	if adminLabels[config.PodSecurityLabelPrefix+"enforce"] != "baseline" {
+		t.Fatal("admin namespace did not receive Pod Security labels when admin privilege is disabled")
+	}
+	privilegedLabels := desiredNamespaceLabels("ns-admin", adminLabels, true)
+	if _, ok := privilegedLabels[config.PodSecurityLabelPrefix+"enforce"]; ok {
+		t.Fatal("admin Pod Security labels were retained when admin privilege is enabled")
+	}
+	if privilegedLabels["example.com/keep"] != "value" {
+		t.Fatal("unrelated namespace label was removed")
+	}
+}
+
+func TestAdminClusterRoleBindingCleanup(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add RBAC scheme: %v", err)
+	}
+	binding := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName}}
+	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(binding).Build()
+	cleanup := &adminPrivilegeMigration{client: cli}
+	if err := cleanup.Start(context.Background()); err != nil {
+		t.Fatalf("cleanup binding: %v", err)
+	}
+	if err := cli.Get(context.Background(), client.ObjectKey{Name: adminClusterRoleBindingName}, &rbacv1.ClusterRoleBinding{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("binding still exists, get error = %v", err)
+	}
+}
+
+func TestAdminPrivilegeMigrationDisablesLegacyBinding(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add RBAC scheme: %v", err)
+	}
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&userv1.User{ObjectMeta: metav1.ObjectMeta{Name: adminUserName}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: adminClusterRoleBindingName}},
+	).Build()
+	r := &UserReconciler{Client: cli, Scheme: scheme}
+	migration := &adminPrivilegeMigration{
+		client:     cli,
+		reader:     cli,
+		reconciler: r,
+	}
+	if err := migration.Start(context.Background()); err != nil {
+		t.Fatalf("disable admin privilege: %v", err)
+	}
+	if err := cli.Get(context.Background(), client.ObjectKey{Name: adminClusterRoleBindingName}, &rbacv1.ClusterRoleBinding{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("legacy binding still exists, get error = %v", err)
+	}
+	ns := &corev1.Namespace{}
+	if err := cli.Get(context.Background(), client.ObjectKey{Name: config.GetUsersNamespace(adminUserName)}, ns); err != nil {
+		t.Fatalf("get admin namespace: %v", err)
+	}
+	if ns.Labels[config.PodSecurityLabelPrefix+"enforce"] != "baseline" {
+		t.Fatalf("admin namespace labels = %#v", ns.Labels)
+	}
+}
+
+func TestAdminPrivilegeMigrationEnablesLegacyBinding(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add RBAC scheme: %v", err)
+	}
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&userv1.User{ObjectMeta: metav1.ObjectMeta{Name: adminUserName}},
+	).Build()
+	r := &UserReconciler{Client: cli, Scheme: scheme, EnableAdminClusterAdmin: true}
+	migration := &adminPrivilegeMigration{
+		client:                  cli,
+		reader:                  cli,
+		reconciler:              r,
+		enableAdminClusterAdmin: true,
+	}
+	if err := migration.Start(context.Background()); err != nil {
+		t.Fatalf("enable admin privilege: %v", err)
+	}
+	if err := cli.Get(context.Background(), client.ObjectKey{Name: adminClusterRoleBindingName}, &rbacv1.ClusterRoleBinding{}); err != nil {
+		t.Fatalf("get restored binding: %v", err)
+	}
+	ns := &corev1.Namespace{}
+	if err := cli.Get(context.Background(), client.ObjectKey{Name: config.GetUsersNamespace(adminUserName)}, ns); err != nil {
+		t.Fatalf("get admin namespace: %v", err)
+	}
+	if _, ok := ns.Labels[config.PodSecurityLabelPrefix+"enforce"]; ok {
+		t.Fatalf("admin namespace retained Pod Security labels: %#v", ns.Labels)
+	}
+}
+
+func TestAdminPrivilegeMigrationPropagatesSyncError(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add RBAC scheme: %v", err)
+	}
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&userv1.User{ObjectMeta: metav1.ObjectMeta{Name: adminUserName}},
+	).Build()
+	failingClient := namespaceCreateErrorClient{Client: baseClient}
+	r := &UserReconciler{
+		Client:   failingClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+	migration := &adminPrivilegeMigration{
+		client:                  failingClient,
+		reader:                  baseClient,
+		reconciler:              r,
+		enableAdminClusterAdmin: true,
+	}
+	if err := migration.Start(context.Background()); err == nil {
+		t.Fatal("admin privilege migration reported success after namespace sync failed")
 	}
 }
 

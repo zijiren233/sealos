@@ -75,6 +75,7 @@ func main() {
 		kubeAPIBurst               int
 		secureMetrics              bool
 		enableHTTP2                bool
+		enableAdminClusterAdmin    bool
 		tlsOpts                    []func(*tls.Config)
 	)
 	flag.StringVar(
@@ -148,6 +149,12 @@ func main() {
 	)
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(
+		&enableAdminClusterAdmin,
+		"enable-admin-cluster-admin",
+		false,
+		"Preserve the legacy cluster-admin binding and privileged admin namespace labels.",
+	)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
 	opts := zap.Options{
 		Development: true,
@@ -240,7 +247,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.UserReconciler{}).SetupWithManager(
+	if err = (&controllers.UserReconciler{
+		EnableAdminClusterAdmin: enableAdminClusterAdmin,
+	}).SetupWithManager(
 		mgr,
 		rateLimiterOptions,
 		minRequeueDuration,

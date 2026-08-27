@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -35,6 +36,13 @@ func Options(syncPeriod *time.Duration) ctrlcache.Options {
 		ReaderFailOnMissingInformer: true,
 		DefaultTransform:            ctrlcache.TransformStripManagedFields(),
 		ByObject: map[client.Object]ctrlcache.ByObject{
+			&corev1.Namespace{}: {
+				Transform: transformNamespace,
+			},
+			&rbacv1.ClusterRoleBinding{}: {
+				Field:     fields.OneTermEqualSelector("metadata.name", config.AdminClusterRoleBindingName),
+				Transform: transformKeyMetadata,
+			},
 			&licensev1.License{}: {
 				Transform: transformKeyMetadata,
 			},
@@ -120,6 +128,30 @@ func transformKeyMetadata(obj any) (any, error) {
 
 func transformOwnerMetadata(obj any) (any, error) {
 	return transformMetadata(obj, true)
+}
+
+func transformNamespace(obj any) (any, error) {
+	metadata, ok := obj.(*metav1.PartialObjectMetadata)
+	if !ok {
+		return obj, nil
+	}
+
+	projected := metav1.ObjectMeta{
+		Name:            metadata.Name,
+		ResourceVersion: metadata.ResourceVersion,
+	}
+	for key, value := range metadata.Labels {
+		if config.IsPodSecurityLabel(key) {
+			if projected.Labels == nil {
+				projected.Labels = make(map[string]string)
+			}
+			projected.Labels[key] = value
+		}
+	}
+	return &metav1.PartialObjectMetadata{
+		TypeMeta:   metadata.TypeMeta,
+		ObjectMeta: projected,
+	}, nil
 }
 
 func transformMetadata(obj any, keepOwnerReferences bool) (any, error) {
