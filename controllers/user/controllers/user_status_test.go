@@ -348,7 +348,7 @@ func TestSetObservedCSRExpirationSecondsNormalizesOnlyDuringRefresh(t *testing.T
 	}
 }
 
-func TestFailedKubeConfigSyncClearsDeadline(t *testing.T) {
+func TestFailedKubeConfigSyncRetriesImmediately(t *testing.T) {
 	t.Parallel()
 	r := &UserReconciler{}
 	r.recordKubeConfigSync("alice", time.Hour, true)
@@ -357,17 +357,26 @@ func TestFailedKubeConfigSyncClearsDeadline(t *testing.T) {
 	if err := r.finishKubeConfigSync("alice", state, time.Hour); err == nil {
 		t.Fatal("failed kubeconfig sync did not return its error")
 	}
-	if _, ok := r.nextKubeConfigSync.Load("alice"); ok {
-		t.Fatal("failed kubeconfig sync retained a future deadline")
+	value, ok := r.nextKubeConfigSync.Load("alice")
+	deadline, deadlineOK := value.(time.Time)
+	if !ok || !deadlineOK || deadline.After(time.Now()) {
+		t.Fatalf("failed kubeconfig sync deadline = %v, want due now", value)
 	}
 }
 
 func TestKubeConfigSyncAddsFailureCondition(t *testing.T) {
 	t.Parallel()
+	refreshAt := metav1.NewTime(time.Now().Add(time.Hour))
 	user := &userv1.User{ObjectMeta: metav1.ObjectMeta{Name: "alice"}}
+	user.Status.KubeConfig = "existing-kubeconfig"
+	user.Status.KubeConfigRefreshAt = &refreshAt
+	user.Status.ObservedCSRExpirationSeconds = userv1.DefaultCSRExpirationSeconds
 	r := &UserReconciler{Recorder: record.NewFakeRecorder(1)}
-	r.syncKubeConfig(context.Background(), user, &userReconcileState{})
-
+	state := &userReconcileState{}
+	r.syncKubeConfig(context.Background(), user, state)
+	if state.syncError == nil {
+		t.Fatal("kubeconfig sync failure was not recorded")
+	}
 	condition := helper.GetCondition(
 		user.Status.Conditions,
 		&userv1.Condition{Type: kubeConfigReadyCondition},
@@ -377,6 +386,11 @@ func TestKubeConfigSyncAddsFailureCondition(t *testing.T) {
 	}
 	if condition.Reason != "SyncUserError" {
 		t.Fatalf("kubeconfig condition reason = %q, want SyncUserError", condition.Reason)
+	}
+	if user.Status.KubeConfig != "existing-kubeconfig" || user.Status.KubeConfigRefreshAt == nil ||
+		!user.Status.KubeConfigRefreshAt.Equal(&refreshAt) ||
+		user.Status.ObservedCSRExpirationSeconds != userv1.DefaultCSRExpirationSeconds {
+		t.Fatalf("kubeconfig failure cleared existing status: %#v", user.Status)
 	}
 }
 
@@ -604,7 +618,11 @@ func TestRoleSyncFailureUpdatesRoleCondition(t *testing.T) {
 		Scheme:   scheme,
 		Recorder: record.NewFakeRecorder(10),
 	}
-	r.syncRolesIfNeeded(context.Background(), user)
+	state := &userReconcileState{}
+	r.syncRolesIfNeeded(context.Background(), user, state)
+	if state.syncError == nil {
+		t.Fatal("role sync failure was not recorded")
+	}
 	condition := helper.GetCondition(
 		user.Status.Conditions,
 		&userv1.Condition{Type: roleSyncReadyCondition},

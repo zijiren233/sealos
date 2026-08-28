@@ -700,7 +700,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 	r.syncNamespaceIfNeeded(ctx, user, state)
 	r.syncServiceAccountIfNeeded(ctx, user, state)
 	r.syncKubeConfigIfNeeded(ctx, user, state)
-	r.syncRolesIfNeeded(ctx, user)
+	r.syncRolesIfNeeded(ctx, user, state)
 	r.syncRoleBindingIfNeeded(ctx, user, state)
 	r.syncClusterRoleBindingIfNeeded(ctx, user, state)
 	r.syncFinalStatus(ctx, user, state)
@@ -738,12 +738,15 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 		if syncErr := r.finishKubeConfigSync(user.Name, state, requeueAfter); syncErr != nil {
 			return ctrl.Result{}, syncErr
 		}
+		if state.syncError != nil {
+			return ctrl.Result{}, state.syncError
+		}
 		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 	if err = r.updateStatus(ctx, user, originalStatus); err != nil {
 		if state.kubeConfigSyncAttempted {
 			// The generated kubeconfig is not durable until the status patch succeeds.
-			r.nextKubeConfigSync.Delete(user.Name)
+			r.nextKubeConfigSync.Store(user.Name, time.Now())
 		}
 		r.Recorder.Eventf(
 			user,
@@ -759,6 +762,9 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 	if syncErr := r.finishKubeConfigSync(user.Name, state, requeueAfter); syncErr != nil {
 		return ctrl.Result{}, syncErr
 	}
+	if state.syncError != nil {
+		return ctrl.Result{}, state.syncError
+	}
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
@@ -767,11 +773,16 @@ func (r *UserReconciler) finishKubeConfigSync(
 	state *userReconcileState,
 	requeueAfter time.Duration,
 ) error {
-	if state == nil || !state.kubeConfigSyncAttempted {
+	if state == nil {
+		return nil
+	}
+	if !state.kubeConfigSyncAttempted {
 		return nil
 	}
 	if !state.kubeConfigSynced {
-		r.nextKubeConfigSync.Delete(userName)
+		// Keep the in-memory deadline due so the next workqueue retry does not
+		// get hidden by a future persisted refresh time.
+		r.nextKubeConfigSync.Store(userName, time.Now())
 		return state.syncError
 	}
 	r.recordKubeConfigSync(userName, requeueAfter, true)
@@ -907,6 +918,7 @@ func (r *UserReconciler) boundTokenSecretMatches(
 func (r *UserReconciler) syncRolesIfNeeded(
 	ctx context.Context,
 	user *userv1.User,
+	state *userReconcileState,
 ) {
 	roleCondition := &userv1.Condition{
 		Type:               roleSyncReadyCondition,
@@ -922,7 +934,6 @@ func (r *UserReconciler) syncRolesIfNeeded(
 			r.saveCondition(user, roleCondition.DeepCopy())
 		}
 	}()
-	allHealthy := r.cache != nil
 	for _, roleType := range []userv1.RoleType{
 		userv1.OwnerRoleType,
 		userv1.ManagerRoleType,
@@ -937,11 +948,7 @@ func (r *UserReconciler) syncRolesIfNeeded(
 		if healthy {
 			continue
 		}
-		allHealthy = false
-		r.createRole(ctx, roleCondition, user, roleType)
-	}
-	if allHealthy {
-		r.markConditionReadyIfNeeded(user, roleSyncReadyCondition)
+		r.createRole(ctx, roleCondition, user, state, roleType)
 	}
 }
 
@@ -1061,6 +1068,7 @@ func (r *UserReconciler) createRole(
 	ctx context.Context,
 	condition *userv1.Condition,
 	user *userv1.User,
+	state *userReconcileState,
 	roleType userv1.RoleType,
 ) {
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -1088,6 +1096,7 @@ func (r *UserReconciler) createRole(
 		)
 		return nil
 	}); err != nil {
+		state.recordSyncError(err)
 		helper.SetConditionError(condition, "SyncUserError", err)
 		r.Recorder.Eventf(
 			user,

@@ -149,7 +149,7 @@ func TestResourceSyncIfNeededRepairsMissingResources(t *testing.T) {
 				}
 			},
 			sync: func(ctx context.Context, r *UserReconciler, user *userv1.User, state *userReconcileState) {
-				r.syncRolesIfNeeded(ctx, user)
+				r.syncRolesIfNeeded(ctx, user, state)
 			},
 			verify: func(t *testing.T, cli client.Client, user *userv1.User) {
 				t.Helper()
@@ -187,7 +187,7 @@ func TestResourceSyncIfNeededRepairsMissingResources(t *testing.T) {
 				}
 			},
 			sync: func(ctx context.Context, r *UserReconciler, user *userv1.User, state *userReconcileState) {
-				r.syncRolesIfNeeded(ctx, user)
+				r.syncRolesIfNeeded(ctx, user, state)
 			},
 			verify: func(t *testing.T, cli client.Client, user *userv1.User) {
 				t.Helper()
@@ -449,23 +449,31 @@ func TestReconcileSkipsHealthyCachedUserResources(t *testing.T) {
 	}
 }
 
-func TestKubeConfigSyncSkipsLegacyStatusWithoutReadyCondition(t *testing.T) {
+func TestReconcileSkipsHealthyStatusWithoutLegacyConditions(t *testing.T) {
 	t.Parallel()
 	user := benchmarkProcessedUser("legacy-user", time.Now().Add(time.Hour))
-	filteredConditions := make([]userv1.Condition, 0, len(user.Status.Conditions)-1)
+	filteredConditions := make([]userv1.Condition, 0, len(user.Status.Conditions)-2)
 	for _, condition := range user.Status.Conditions {
-		if condition.Type != kubeConfigReadyCondition {
+		if condition.Type != kubeConfigReadyCondition && condition.Type != roleSyncReadyCondition {
 			filteredConditions = append(filteredConditions, condition)
 		}
 	}
 	user.Status.Conditions = filteredConditions
-	r := &UserReconciler{cache: healthyStartupCache{}}
-	state := &userReconcileState{}
-	r.syncServiceAccountIfNeeded(context.Background(), user, state)
-	r.syncKubeConfigIfNeeded(context.Background(), user, state)
-
-	if state.kubeConfigSyncAttempted {
-		t.Fatal("legacy status without KubeConfigSyncReady triggered kubeconfig sync")
+	originalStatus := user.Status.DeepCopy()
+	r := &UserReconciler{
+		cache:              healthyStartupCache{},
+		minRequeueDuration: time.Minute,
+		maxRequeueDuration: time.Minute,
+	}
+	if _, err := r.reconcile(context.Background(), user); err != nil {
+		t.Fatalf("reconcile healthy legacy user: %v", err)
+	}
+	if !reflect.DeepEqual(user.Status, *originalStatus) {
+		t.Fatalf(
+			"missing conditions were restored for healthy resources: before=%#v after=%#v",
+			originalStatus,
+			user.Status,
+		)
 	}
 }
 
