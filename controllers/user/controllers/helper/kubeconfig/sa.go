@@ -119,7 +119,11 @@ func (sac *ServiceAccountConfig) applyBoundTokenSecret(
 		},
 	}
 	_, err := controllerutil.CreateOrUpdate(ctx, cli, secret, func() error {
-		secret.Type = v1.SecretTypeOpaque
+		// Secret type is immutable after creation. Keep the type of legacy
+		// bound secrets and use Opaque only for newly created secrets.
+		if secret.Type == "" {
+			secret.Type = v1.SecretTypeOpaque
+		}
 		if secret.Annotations == nil {
 			secret.Annotations = map[string]string{}
 		}

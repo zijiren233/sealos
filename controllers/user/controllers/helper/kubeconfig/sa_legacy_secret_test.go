@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -209,5 +210,37 @@ func TestServiceAccountConfigWithForceNewSecret(t *testing.T) {
 			cfg.secretName,
 			cfg.sa.Secrets[0].Name,
 		)
+	}
+}
+
+func TestApplyBoundTokenSecretPreservesExistingType(t *testing.T) {
+	t.Parallel()
+
+	const (
+		userName   = "alice"
+		namespace  = "user-system"
+		secretName = "sealos-token-alice"
+	)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+			UID:       types.UID("secret-alice"),
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+	cli := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(secret).Build()
+	cfg := &ServiceAccountConfig{
+		DefaultConfig: &DefaultConfig{user: userName},
+		namespace:     namespace,
+		secretName:    secretName,
+	}
+
+	got, err := cfg.applyBoundTokenSecret(context.Background(), cli)
+	if err != nil {
+		t.Fatalf("apply bound token secret: %v", err)
+	}
+	if got.Type != corev1.SecretTypeServiceAccountToken {
+		t.Fatalf("secret type = %s, want %s", got.Type, corev1.SecretTypeServiceAccountToken)
 	}
 }
