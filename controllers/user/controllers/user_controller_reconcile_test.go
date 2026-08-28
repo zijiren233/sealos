@@ -469,6 +469,35 @@ func TestKubeConfigSyncSkipsLegacyStatusWithoutReadyCondition(t *testing.T) {
 	}
 }
 
+func TestKubeConfigSyncFailedConditionForcesRetry(t *testing.T) {
+	t.Parallel()
+	user := benchmarkProcessedUser("failed-kubeconfig", time.Now().Add(time.Hour))
+	for i := range user.Status.Conditions {
+		if user.Status.Conditions[i].Type == kubeConfigReadyCondition {
+			user.Status.Conditions[i].Status = corev1.ConditionFalse
+			break
+		}
+	}
+	if !kubeConfigSyncFailed(user) {
+		t.Fatal("failed kubeconfig condition was not detected")
+	}
+
+	for _, status := range []corev1.ConditionStatus{
+		corev1.ConditionTrue,
+		corev1.ConditionUnknown,
+	} {
+		for i := range user.Status.Conditions {
+			if user.Status.Conditions[i].Type == kubeConfigReadyCondition {
+				user.Status.Conditions[i].Status = status
+				break
+			}
+		}
+		if kubeConfigSyncFailed(user) {
+			t.Fatalf("kubeconfig condition %q incorrectly forced a retry", status)
+		}
+	}
+}
+
 func TestBoundTokenSecretMatchesDetectsIdentityDrift(t *testing.T) {
 	t.Parallel()
 	scheme := reconcileTestScheme(t)

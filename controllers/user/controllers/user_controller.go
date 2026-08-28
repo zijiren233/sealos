@@ -862,7 +862,8 @@ func (r *UserReconciler) syncKubeConfigIfNeeded(
 	user *userv1.User,
 	state *userReconcileState,
 ) {
-	if r.cache != nil && !r.kubeConfigSyncDue(user) &&
+	if r.cache != nil && !kubeConfigSyncFailed(user) &&
+		!r.kubeConfigSyncDue(user) &&
 		csrExpirationStatusMatches(
 			user.Spec.CSRExpirationSeconds,
 			user.Status.ObservedCSRExpirationSeconds,
@@ -1331,9 +1332,8 @@ func (r *UserReconciler) syncKubeConfig(
 	user *userv1.User,
 	state *userReconcileState,
 ) {
-	userConditionType := userv1.ConditionType("KubeConfigSyncReady")
 	userCondition := &userv1.Condition{
-		Type:               userConditionType,
+		Type:               kubeConfigReadyCondition,
 		Status:             v1.ConditionTrue,
 		LastTransitionTime: metav1.Now(),
 		LastHeartbeatTime:  metav1.Now(),
@@ -1586,6 +1586,18 @@ func userKubeConfigNeedsRotation(user *userv1.User) bool {
 		return true
 	}
 	return !user.Spec.KubeConfigRotateAt.Equal(user.Status.ObservedKubeConfigRotateAt)
+}
+
+func kubeConfigSyncFailed(user *userv1.User) bool {
+	if user == nil {
+		return false
+	}
+	for _, condition := range user.Status.Conditions {
+		if condition.Type == kubeConfigReadyCondition {
+			return condition.Status == v1.ConditionFalse
+		}
+	}
+	return false
 }
 
 func (r *UserReconciler) updateStatus(
