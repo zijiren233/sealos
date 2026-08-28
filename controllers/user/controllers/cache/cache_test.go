@@ -308,26 +308,6 @@ func TestTransformMetadataKeepsOnlyEventFields(t *testing.T) {
 	}
 	metadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
 
-	transformed, err := transformLicense(metadata)
-	if err != nil {
-		t.Fatalf("transform license metadata: %v", err)
-	}
-	got, ok := transformed.(*metav1.PartialObjectMetadata)
-	if !ok {
-		t.Fatalf("transformed type = %T, want *metav1.PartialObjectMetadata", transformed)
-	}
-	if got.GroupVersionKind() != metadata.GroupVersionKind() || got.Name != metadata.Name ||
-		got.Namespace != metadata.Namespace || got.ResourceVersion != metadata.ResourceVersion {
-		t.Fatalf("required event metadata was not retained: %#v", got)
-	}
-	if len(got.OwnerReferences) != 0 ||
-		len(got.Annotations) != 0 ||
-		len(got.Labels) != 0 ||
-		len(got.Finalizers) != 0 ||
-		len(got.ManagedFields) != 0 {
-		t.Fatalf("unused metadata was retained: %#v", got.ObjectMeta)
-	}
-
 	keyOnly, err := transformDeleteRequest(metadata)
 	if err != nil {
 		t.Fatalf("transform delete request metadata: %v", err)

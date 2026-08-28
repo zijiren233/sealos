@@ -646,9 +646,6 @@ func TestKubeConfigSyncSkipsSecretUIDRotationForLegacyStatus(t *testing.T) {
 func TestNewUserStatusNeedsInitialization(t *testing.T) {
 	t.Parallel()
 	user := &userv1.User{ObjectMeta: metav1.ObjectMeta{Name: "new-user"}}
-	if !(&UserReconciler{}).isNewUser(user) {
-		t.Fatal("empty user was not classified as new")
-	}
 	if !userStatusNeedsSync(user) {
 		t.Fatal("new user was classified as already synchronized")
 	}

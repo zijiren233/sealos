@@ -22,7 +22,6 @@ import (
 	"os"
 	"time"
 
-	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/controllers"
 	usercache "github.com/labring/sealos/controllers/user/controllers/cache"
@@ -53,7 +52,6 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(licensev1.AddToScheme(scheme))
 	utilruntime.Must(userv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
@@ -249,16 +247,6 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-	if err := controllers.SetupLicenseGate(mgr); err != nil {
-		setupLog.Error(err, "unable to set up license gate")
-		os.Exit(1)
-	}
-	userCounter, err := controllers.SetupUserCount(mgr)
-	if err != nil {
-		setupLog.Error(err, "unable to set up user count cache")
-		os.Exit(1)
-	}
-
 	if err = (&controllers.UserReconciler{
 		EnableAdminClusterAdmin:          enableAdminClusterAdmin,
 		EnableStrictNamespacePodSecurity: enableStrictNamespacePSA,
@@ -268,7 +256,6 @@ func main() {
 		minRequeueDuration,
 		maxRequeueDuration,
 		restartPredicateDuration,
-		userCounter,
 	); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "User")
 		os.Exit(1)
@@ -277,7 +264,7 @@ func main() {
 	if os.Getenv("DISABLE_WEBHOOKS") == "true" {
 		setupLog.Info("disable all webhooks")
 	} else {
-		if err = (&userv1.User{}).SetupWebhookWithManager(mgr, userCounter); err != nil {
+		if err = (&userv1.User{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "User")
 			os.Exit(1)
 		}

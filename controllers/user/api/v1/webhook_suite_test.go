@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labring/sealos/controllers/user/pkg/usercount"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -102,9 +101,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	userCounter := usercount.NewCounter()
-	userCounter.MarkInitialized()
-	err = (&User{}).SetupWebhookWithManager(mgr, userCounter)
+	err = (&User{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = (&Operationrequest{}).SetupWebhookWithManager(mgr)

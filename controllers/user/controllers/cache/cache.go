@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
 	"github.com/labring/sealos/controllers/user/controllers/helper/hash"
@@ -72,9 +71,6 @@ func Options(syncPeriod *time.Duration) ctrlcache.Options {
 				// its subjects and role reference.
 				Transform: transformClusterRoleBinding,
 			},
-			&licensev1.License{}: {
-				Transform: transformLicense,
-			},
 			&userv1.User{}: {
 				Transform: transformUser,
 			},
@@ -112,7 +108,6 @@ func Options(syncPeriod *time.Duration) ctrlcache.Options {
 // UncachedObjects returns objects whose reads require complete, current API data.
 func UncachedObjects() []client.Object {
 	return []client.Object{
-		&licensev1.License{},
 		&userv1.DeleteRequest{},
 		&userv1.Operationrequest{},
 		&corev1.Namespace{},
@@ -297,17 +292,6 @@ func refreshAtFromExpiration(expiration time.Time) *metav1.Time {
 
 func refreshAtFromIssuedAt(issuedAt, expiration time.Time) *metav1.Time {
 	return &metav1.Time{Time: issuedAt.Add(expiration.Sub(issuedAt) * 8 / 10)}
-}
-
-func transformLicense(obj any) (any, error) {
-	metadata, ok := obj.(*metav1.PartialObjectMetadata)
-	if !ok {
-		return obj, nil
-	}
-	return &metav1.PartialObjectMetadata{
-		TypeMeta:   metadata.TypeMeta,
-		ObjectMeta: projectEventObjectMeta(metadata.ObjectMeta),
-	}, nil
 }
 
 func transformDeleteRequest(obj any) (any, error) {

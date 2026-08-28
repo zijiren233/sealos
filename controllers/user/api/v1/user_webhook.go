@@ -19,10 +19,6 @@ package v1
 import (
 	"context"
 	"errors"
-	"fmt"
-
-	"github.com/labring/sealos/controllers/user/pkg/licensegate"
-	"github.com/labring/sealos/controllers/user/pkg/usercount"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,37 +28,10 @@ import (
 
 // log is for logging in this package.
 var (
-	userlog          = logf.Log.WithName("user-webhook")
-	userWebhookCount *usercount.Counter
+	userlog = logf.Log.WithName("user-webhook")
 )
 
-const (
-	licenseLimitErrorCode   = 40301
-	userCountLimitErrorCode = 40302
-)
-
-func buildLicenseLimitErrorMessage() string {
-	return fmt.Sprintf(
-		"{\"code\":%d,\"message\":\"license inactive: user limit reached\"}",
-		licenseLimitErrorCode,
-	)
-}
-
-func buildUserCountLimitErrorMessage() string {
-	return fmt.Sprintf(
-		"{\"code\":%d,\"message\":\"license active: user limit reached\"}",
-		userCountLimitErrorCode,
-	)
-}
-
-func (r *User) SetupWebhookWithManager(
-	mgr ctrl.Manager,
-	userCounter *usercount.Counter,
-) error {
-	if userCounter == nil {
-		return errors.New("user webhook count cache is not initialized")
-	}
-	userWebhookCount = userCounter
+func (r *User) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
 		WithDefaulter(r).
@@ -110,18 +79,6 @@ func (r *User) ValidateCreate(ctx context.Context, obj runtime.Object) (admissio
 	userlog.Info("validate create", "name", user.Name)
 	if err := user.validateCSRExpirationSeconds(); err != nil {
 		return admission.Warnings{}, err
-	}
-	if userWebhookCount == nil || !userWebhookCount.Initialized() {
-		return admission.Warnings{}, errors.New("user count cache is not initialized")
-	}
-	currentCount := userWebhookCount.Count()
-	if !licensegate.AllowNewUser(currentCount) {
-		message := buildLicenseLimitErrorMessage()
-		if licensegate.HasActiveLicense() {
-			message = buildUserCountLimitErrorMessage()
-		}
-		warnings := admission.Warnings{message}
-		return warnings, errors.New(message)
 	}
 	return admission.Warnings{}, validateAnnotationKeyNotEmpty(
 		user.ObjectMeta,

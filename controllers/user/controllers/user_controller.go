@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	usercache "github.com/labring/sealos/controllers/user/controllers/cache"
 	"github.com/labring/sealos/controllers/user/controllers/helper"
@@ -36,8 +35,6 @@ import (
 	"github.com/labring/sealos/controllers/user/controllers/helper/hash"
 	"github.com/labring/sealos/controllers/user/controllers/helper/kubeconfig"
 	"github.com/labring/sealos/controllers/user/controllers/helper/ratelimiter"
-	"github.com/labring/sealos/controllers/user/pkg/licensegate"
-	"github.com/labring/sealos/controllers/user/pkg/usercount"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -64,7 +61,6 @@ const (
 	userAnnotationCreatorKey         = userv1.UserAnnotationCreatorKey
 	userAnnotationOwnerKey           = userv1.UserAnnotationOwnerKey
 	userLabelOwnerKey                = userv1.UserLabelOwnerKey
-	licenseLimitedCondition          = userv1.ConditionType("LicenseLimited")
 	adminUserName                    = "admin"
 	adminClusterRoleBindingName      = config.AdminClusterRoleBindingName
 	userFinalizerName                = "sealos.io/user.finalizers"
@@ -78,11 +74,10 @@ const (
 
 // UserReconciler reconciles a User object
 type UserReconciler struct {
-	Logger      logr.Logger
-	Recorder    record.EventRecorder
-	cache       client.Reader
-	userCounter *usercount.Counter
-	config      *rest.Config
+	Logger   logr.Logger
+	Recorder record.EventRecorder
+	cache    client.Reader
+	config   *rest.Config
 	*runtime.Scheme
 	client.Client
 	finalizer          *finalizer.Finalizer
@@ -566,7 +561,6 @@ func (OwnerAnnotationChangedPredicate) Update(e event.UpdateEvent) bool {
 // retained for compatibility and ignored.
 func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.RateLimiterOptions,
 	minRequeueDuration, _, _ time.Duration,
-	userCounter *usercount.Counter,
 ) error {
 	const controllerName = "user_controller"
 	if r.Client == nil {
@@ -582,7 +576,6 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 	}
 	r.Scheme = mgr.GetScheme()
 	r.cache = mgr.GetCache()
-	r.userCounter = userCounter
 	r.config = mgr.GetConfig()
 	r.Logger.V(1).Info("init reconcile controller user")
 	r.minRequeueDuration = minRequeueDuration
@@ -653,11 +646,6 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 			handler.EnqueueRequestsFromMapFunc(r.adminClusterRoleBindingToUserRequests),
 			builder.WithPredicates(AdminClusterRoleBindingPredicate{}),
 		).
-		Watches(
-			&licensev1.License{},
-			handler.EnqueueRequestsFromMapFunc(r.licenseToUserRequests),
-			builder.OnlyMetadata,
-		).
 		Watches(&rbacv1.Role{}, ownerEventHandler).
 		Watches(&rbacv1.RoleBinding{}, ownerEventHandler).
 		Watches(&v1.ServiceAccount{}, ownerEventHandler).
@@ -704,13 +692,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 	}
 
 	originalStatus := user.Status.DeepCopy()
-	blocked, err := r.handleLicenseLimit(ctx, user, originalStatus)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if blocked {
-		return ctrl.Result{RequeueAfter: r.minRequeueDuration}, nil
-	}
+	var err error
 
 	defer func() {
 		r.Logger.V(1).
@@ -1653,70 +1635,6 @@ func (r *UserReconciler) updateStatus(
 	return r.Client.Status().Patch(ctx, user, client.MergeFrom(original))
 }
 
-func (r *UserReconciler) handleLicenseLimit(
-	ctx context.Context,
-	user *userv1.User,
-	originalStatus *userv1.UserStatus,
-) (bool, error) {
-	if !r.isNewUser(user) {
-		user.Status.Conditions = helper.DeleteCondition(
-			user.Status.Conditions,
-			licenseLimitedCondition,
-		)
-		return false, nil
-	}
-
-	if r.userCounter == nil || !r.userCounter.Initialized() {
-		return false, errors.New("user count cache is not initialized")
-	}
-	userCount := r.userCounter.CountExcluding(user.Name)
-	if licensegate.AllowNewUser(userCount) {
-		user.Status.Conditions = helper.DeleteCondition(
-			user.Status.Conditions,
-			licenseLimitedCondition,
-		)
-		return false, nil
-	}
-	limitCondition := &userv1.Condition{
-		Type:               licenseLimitedCondition,
-		Status:             v1.ConditionFalse,
-		LastTransitionTime: metav1.Now(),
-		LastHeartbeatTime:  metav1.Now(),
-		Reason:             "LicenseLimitExceeded",
-		Message:            licensegate.LimitMessage(),
-	}
-	user.Status.Phase = userv1.UserPending
-	user.Status.Conditions = helper.UpdateCondition(user.Status.Conditions, *limitCondition)
-	if err := r.updateStatus(
-		ctx,
-		user,
-		originalStatus,
-	); err != nil {
-		return false, err
-	}
-	r.Recorder.Eventf(
-		user,
-		v1.EventTypeWarning,
-		"LicenseLimitExceeded",
-		"%s: %d",
-		licensegate.LimitMessage(),
-		licensegate.UserLimit(),
-	)
-	return true, nil
-}
-
-func (r *UserReconciler) isNewUser(user *userv1.User) bool {
-	if user == nil || user.Status.ObservedGeneration != 0 {
-		return false
-	}
-	for _, condition := range user.Status.Conditions {
-		if condition.Type != licenseLimitedCondition {
-			return false
-		}
-	}
-	return true
-}
-
 func nextKubeConfigRequeueDuration(
 	user *userv1.User,
 	state *userReconcileState,
@@ -1738,23 +1656,4 @@ func nextKubeConfigRequeueDuration(
 		return time.Second
 	}
 	return refreshDuration
-}
-
-func (r *UserReconciler) licenseToUserRequests(
-	ctx context.Context,
-	obj client.Object,
-) []ctrl.Request {
-	userList := &userv1.UserList{}
-	if err := r.cache.List(ctx, userList); err != nil {
-		r.Logger.Error(err, "list users for license change failed")
-		return nil
-	}
-	requests := make([]ctrl.Request, 0, len(userList.Items))
-	for i := range userList.Items {
-		requests = append(
-			requests,
-			ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&userList.Items[i])},
-		)
-	}
-	return requests
 }
