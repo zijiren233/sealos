@@ -18,7 +18,18 @@ import (
 	"testing"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	corev1 "k8s.io/api/core/v1"
 )
+
+func TestGetConditionReturnsIndependentCopyWhenMissing(t *testing.T) {
+	t.Parallel()
+	desired := &userv1.Condition{Type: userv1.Ready, Status: corev1.ConditionTrue}
+	got := GetCondition(nil, desired)
+	got.Status = corev1.ConditionFalse
+	if desired.Status != corev1.ConditionTrue {
+		t.Fatal("missing condition result aliases the desired condition")
+	}
+}
 
 func TestDeleteConditionKeepsOriginalSliceWhenUnchanged(t *testing.T) {
 	t.Parallel()

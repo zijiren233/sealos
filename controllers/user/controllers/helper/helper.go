@@ -49,10 +49,10 @@ func IsConditionsTrue(conditions []v1.Condition) bool {
 func GetCondition(conditions []v1.Condition, condition *v1.Condition) *v1.Condition {
 	for _, con := range conditions {
 		if con.Type == condition.Type {
-			return &con
+			return con.DeepCopy()
 		}
 	}
-	return condition
+	return condition.DeepCopy()
 }
 
 func DiffCondition(condition1, condition2 *v1.Condition) bool {

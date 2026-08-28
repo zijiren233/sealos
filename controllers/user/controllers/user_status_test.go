@@ -362,6 +362,24 @@ func TestFailedKubeConfigSyncClearsDeadline(t *testing.T) {
 	}
 }
 
+func TestKubeConfigSyncAddsFailureCondition(t *testing.T) {
+	t.Parallel()
+	user := &userv1.User{ObjectMeta: metav1.ObjectMeta{Name: "alice"}}
+	r := &UserReconciler{Recorder: record.NewFakeRecorder(1)}
+	r.syncKubeConfig(context.Background(), user, &userReconcileState{})
+
+	condition := helper.GetCondition(
+		user.Status.Conditions,
+		&userv1.Condition{Type: kubeConfigReadyCondition},
+	)
+	if condition.Status != corev1.ConditionFalse {
+		t.Fatalf("kubeconfig condition status = %s, want False", condition.Status)
+	}
+	if condition.Reason != "SyncUserError" {
+		t.Fatalf("kubeconfig condition reason = %q, want SyncUserError", condition.Reason)
+	}
+}
+
 func TestUserResourcesNeedSyncFromReader(t *testing.T) {
 	t.Parallel()
 	scheme := runtime.NewScheme()
