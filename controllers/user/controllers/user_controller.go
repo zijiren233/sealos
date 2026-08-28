@@ -863,10 +863,6 @@ func (r *UserReconciler) syncKubeConfigIfNeeded(
 	state *userReconcileState,
 ) {
 	if r.cache != nil && !r.kubeConfigSyncDue(user) &&
-		helper.IsConditionTrue(user.Status.Conditions, userv1.Condition{
-			Type:   kubeConfigReadyCondition,
-			Status: v1.ConditionTrue,
-		}) &&
 		csrExpirationStatusMatches(
 			user.Spec.CSRExpirationSeconds,
 			user.Status.ObservedCSRExpirationSeconds,

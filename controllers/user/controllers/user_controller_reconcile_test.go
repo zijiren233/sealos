@@ -449,6 +449,26 @@ func TestReconcileSkipsHealthyCachedUserResources(t *testing.T) {
 	}
 }
 
+func TestKubeConfigSyncSkipsLegacyStatusWithoutReadyCondition(t *testing.T) {
+	t.Parallel()
+	user := benchmarkProcessedUser("legacy-user", time.Now().Add(time.Hour))
+	filteredConditions := make([]userv1.Condition, 0, len(user.Status.Conditions)-1)
+	for _, condition := range user.Status.Conditions {
+		if condition.Type != kubeConfigReadyCondition {
+			filteredConditions = append(filteredConditions, condition)
+		}
+	}
+	user.Status.Conditions = filteredConditions
+	r := &UserReconciler{cache: healthyStartupCache{}}
+	state := &userReconcileState{}
+	r.syncServiceAccountIfNeeded(context.Background(), user, state)
+	r.syncKubeConfigIfNeeded(context.Background(), user, state)
+
+	if state.kubeConfigSyncAttempted {
+		t.Fatal("legacy status without KubeConfigSyncReady triggered kubeconfig sync")
+	}
+}
+
 func TestBoundTokenSecretMatchesDetectsIdentityDrift(t *testing.T) {
 	t.Parallel()
 	scheme := reconcileTestScheme(t)
