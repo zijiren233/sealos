@@ -26,6 +26,7 @@ import (
 	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
+	"github.com/labring/sealos/controllers/user/controllers/helper/hash"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +39,8 @@ import (
 // Options keeps only explicitly registered informer data in memory. Large
 // fields are removed when controllers only need a smaller object projection.
 func Options(syncPeriod *time.Duration) ctrlcache.Options {
+	secretMetadata := &metav1.PartialObjectMetadata{}
+	secretMetadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
 	return ctrlcache.Options{
 		SyncPeriod:                  syncPeriod,
 		ReaderFailOnMissingInformer: true,
@@ -64,11 +67,11 @@ func Options(syncPeriod *time.Duration) ctrlcache.Options {
 			&userv1.DeleteRequest{}: {
 				Transform: transformDeleteRequest,
 			},
-			&corev1.Secret{}: {
+			secretMetadata: {
 				Namespaces: map[string]ctrlcache.Config{
 					config.GetUserSystemNamespace(): {},
 				},
-				Transform: transformSecret,
+				Transform: transformSecretMetadata,
 			},
 			&corev1.ServiceAccount{}: {
 				Namespaces: map[string]ctrlcache.Config{
@@ -313,7 +316,10 @@ func transformRole(obj any) (any, error) {
 		ObjectMeta: projectOwnerObjectMeta(role.ObjectMeta),
 	}
 	if hasUserController(projected.OwnerReferences) {
-		projected.Rules = copyPolicyRules(role.Rules)
+		if projected.Annotations == nil {
+			projected.Annotations = make(map[string]string)
+		}
+		projected.Annotations[config.RoleRulesHashAnnotation] = hash.HashToString(role.Rules)
 	}
 	return projected, nil
 }
@@ -407,23 +413,6 @@ func projectOwnerObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
 	return projected
 }
 
-func copyPolicyRules(source []rbacv1.PolicyRule) []rbacv1.PolicyRule {
-	if len(source) == 0 {
-		return nil
-	}
-	result := make([]rbacv1.PolicyRule, len(source))
-	for i := range source {
-		result[i] = rbacv1.PolicyRule{
-			Verbs:           append([]string(nil), source[i].Verbs...),
-			APIGroups:       append([]string(nil), source[i].APIGroups...),
-			Resources:       append([]string(nil), source[i].Resources...),
-			ResourceNames:   append([]string(nil), source[i].ResourceNames...),
-			NonResourceURLs: append([]string(nil), source[i].NonResourceURLs...),
-		}
-	}
-	return result
-}
-
 func projectObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
 	out := metav1.ObjectMeta{
 		Name:              in.Name,
@@ -456,18 +445,16 @@ func copyMapValues(source map[string]string, keys ...string) map[string]string {
 	return result
 }
 
-func transformSecret(obj any) (any, error) {
-	secret, ok := obj.(*corev1.Secret)
+func transformSecretMetadata(obj any) (any, error) {
+	metadata, ok := obj.(*metav1.PartialObjectMetadata)
 	if !ok {
 		return obj, nil
 	}
-
-	metadata := projectObjectMeta(secret.ObjectMeta)
-	metadata.OwnerReferences = append([]metav1.OwnerReference(nil), secret.OwnerReferences...)
-	if serviceAccountName, ok := secret.Annotations[corev1.ServiceAccountNameKey]; ok {
-		metadata.Annotations = map[string]string{
-			corev1.ServiceAccountNameKey: serviceAccountName,
-		}
+	projected := &metav1.PartialObjectMetadata{
+		TypeMeta:   metadata.TypeMeta,
+		ObjectMeta: projectObjectMeta(metadata.ObjectMeta),
 	}
-	return &corev1.Secret{TypeMeta: secret.TypeMeta, ObjectMeta: metadata}, nil
+	projected.Annotations = copyMapValues(metadata.Annotations, corev1.ServiceAccountNameKey)
+	projected.OwnerReferences = append([]metav1.OwnerReference(nil), metadata.OwnerReferences...)
+	return projected, nil
 }

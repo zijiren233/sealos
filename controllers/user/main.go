@@ -62,6 +62,7 @@ func init() {
 func main() {
 	var (
 		metricsAddr                string
+		pprofBindAddress           string
 		enableLeaderElection       bool
 		probeAddr                  string
 		rateLimiterOptions         ratelimiter.RateLimiterOptions
@@ -90,6 +91,12 @@ func main() {
 		"health-probe-bind-address",
 		":8081",
 		"The address the probe endpoint binds to.",
+	)
+	flag.StringVar(
+		&pprofBindAddress,
+		"pprof-bind-address",
+		"",
+		"The address the pprof endpoint binds to. Empty disables pprof.",
 	)
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -213,9 +220,10 @@ func main() {
 	setupLog.Info("configured Kubernetes API client rate limit", "qps", cfg.QPS, "burst", cfg.Burst)
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:  scheme,
-		Metrics: metricsServerOptions,
-		Cache:   usercache.Options(&syncPeriod),
+		Scheme:           scheme,
+		Metrics:          metricsServerOptions,
+		PprofBindAddress: pprofBindAddress,
+		Cache:            usercache.Options(&syncPeriod),
 		Client: client.Options{Cache: &client.CacheOptions{
 			DisableFor: usercache.UncachedObjects(),
 		}},

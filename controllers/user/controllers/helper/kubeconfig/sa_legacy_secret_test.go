@@ -104,15 +104,16 @@ func TestCleanupLegacyBoundTokenSecrets(t *testing.T) {
 		Type: corev1.SecretTypeServiceAccountToken,
 	}
 
+	secretMetadata := &metav1.PartialObjectMetadata{}
+	secretMetadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
 	cli := fake.NewClientBuilder().
 		WithScheme(scheme.Scheme).
 		WithObjects(current, legacy, duplicate, other).
-		WithIndex(&corev1.Secret{}, corev1.ServiceAccountNameKey, func(obj client.Object) []string {
-			secret, ok := obj.(*corev1.Secret)
-			if !ok || secret.Annotations == nil {
+		WithIndex(secretMetadata, corev1.ServiceAccountNameKey, func(obj client.Object) []string {
+			if obj.GetAnnotations() == nil {
 				return nil
 			}
-			value := secret.Annotations[corev1.ServiceAccountNameKey]
+			value := obj.GetAnnotations()[corev1.ServiceAccountNameKey]
 			if value == "" {
 				return nil
 			}

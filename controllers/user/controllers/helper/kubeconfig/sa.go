@@ -29,6 +29,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -153,7 +154,8 @@ func CleanupLegacyBoundTokenSecrets(
 	writer client.Writer,
 	userName, keepSecretName string,
 ) error {
-	secrets := &v1.SecretList{}
+	secrets := &metav1.PartialObjectMetadataList{}
+	secrets.SetGroupVersionKind(schema.GroupVersion{Version: "v1"}.WithKind("SecretList"))
 	if err := reader.List(
 		ctx,
 		secrets,
@@ -173,7 +175,10 @@ func CleanupLegacyBoundTokenSecrets(
 		if secret.Annotations == nil || secret.Annotations[v1.ServiceAccountNameKey] != userName {
 			continue
 		}
-		if err := writer.Delete(ctx, secret); err != nil && !apierrors.IsNotFound(err) {
+		deleteTarget := &v1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: secret.Name, Namespace: secret.Namespace,
+		}}
+		if err := writer.Delete(ctx, deleteTarget); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete legacy bound token secret %s: %w", secret.Name, err)
 		}
 	}

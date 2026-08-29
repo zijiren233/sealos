@@ -352,6 +352,15 @@ func (healthyStartupCache) Get(
 	var userName string
 	switch typed := obj.(type) {
 	case *metav1.PartialObjectMetadata:
+		if typed.GroupVersionKind().Kind == "Secret" {
+			userName = strings.TrimPrefix(key.Name, "token-")
+			typed.Name = key.Name
+			typed.Namespace = key.Namespace
+			typed.UID = types.UID("secret-" + userName)
+			typed.Annotations = map[string]string{corev1.ServiceAccountNameKey: userName}
+			typed.OwnerReferences = []metav1.OwnerReference{benchmarkOwnerReference(userName)}
+			return nil
+		}
 		userName = config.GetUserNameByNamespace(key.Name)
 		typed.Name = key.Name
 		typed.Annotations = map[string]string{

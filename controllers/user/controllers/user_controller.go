@@ -401,8 +401,13 @@ func roleMatchesUser(
 	if err := reader.Get(ctx, key, role); err != nil {
 		return false
 	}
-	return metadataMatchesUserResource(role, user) &&
-		reflect.DeepEqual(role.Rules, config.GetUserRole(roleType))
+	if !metadataMatchesUserResource(role, user) {
+		return false
+	}
+	if cachedRulesHash, ok := role.Annotations[config.RoleRulesHashAnnotation]; ok {
+		return cachedRulesHash == hash.HashToString(config.GetUserRole(roleType))
+	}
+	return reflect.DeepEqual(role.Rules, config.GetUserRole(roleType))
 }
 
 func roleBindingMatchesUser(roleBinding *rbacv1.RoleBinding, user *userv1.User) bool {
@@ -585,16 +590,24 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 		return fmt.Errorf("add admin privilege migration: %w", err)
 	}
 
+	secretMetadata := &metav1.PartialObjectMetadata{}
+	secretMetadata.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("Secret"))
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&v1.Secret{},
+		secretMetadata,
 		v1.ServiceAccountNameKey,
 		func(rawObj client.Object) []string {
-			secret, ok := rawObj.(*v1.Secret)
-			if !ok || secret.Annotations == nil {
+			var annotations map[string]string
+			switch secret := rawObj.(type) {
+			case *v1.Secret:
+				annotations = secret.Annotations
+			case *metav1.PartialObjectMetadata:
+				annotations = secret.Annotations
+			}
+			if annotations == nil {
 				return nil
 			}
-			value := secret.Annotations[v1.ServiceAccountNameKey]
+			value := annotations[v1.ServiceAccountNameKey]
 			if value == "" {
 				return nil
 			}
@@ -639,7 +652,7 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 		Watches(&rbacv1.Role{}, ownerEventHandler).
 		Watches(&rbacv1.RoleBinding{}, ownerEventHandler).
 		Watches(&v1.ServiceAccount{}, ownerEventHandler).
-		Watches(&v1.Secret{}, ownerEventHandler).
+		WatchesMetadata(&v1.Secret{}, ownerEventHandler).
 		WithOptions(kubecontroller.Options{
 			MaxConcurrentReconciles: ratelimiter.GetConcurrent(opts),
 			RateLimiter:             ratelimiter.GetRateLimiter(opts),
@@ -653,10 +666,12 @@ func registerStartupCacheInformers(informers cache.Informers) error {
 	}
 	namespaceMetadata := &metav1.PartialObjectMetadata{}
 	namespaceMetadata.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("Namespace"))
+	secretMetadata := &metav1.PartialObjectMetadata{}
+	secretMetadata.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("Secret"))
 	objects := []client.Object{
 		namespaceMetadata,
 		&v1.ServiceAccount{},
-		&v1.Secret{},
+		secretMetadata,
 		&rbacv1.Role{},
 		&rbacv1.RoleBinding{},
 		&rbacv1.ClusterRoleBinding{},
@@ -860,7 +875,7 @@ func (r *UserReconciler) syncServiceAccountIfNeeded(
 		if err := r.cache.Get(ctx, client.ObjectKey{
 			Name: user.Name, Namespace: config.GetUserSystemNamespace(),
 		}, serviceAccount); err == nil && metadataMatchesUserResource(serviceAccount, user) {
-			state.serviceAccount = serviceAccount.DeepCopy()
+			state.serviceAccount = serviceAccount
 			r.markConditionReadyIfNeeded(user, serviceAccountReadyCondition)
 			return
 		}
@@ -897,7 +912,8 @@ func (r *UserReconciler) boundTokenSecretMatches(
 		state.serviceAccount.Secrets[0].Name == "" {
 		return false
 	}
-	secret := &v1.Secret{}
+	secret := &metav1.PartialObjectMetadata{}
+	secret.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("Secret"))
 	if err := r.cache.Get(ctx, client.ObjectKey{
 		Name: state.serviceAccount.Secrets[0].Name, Namespace: config.GetUserSystemNamespace(),
 	}, secret); err != nil {
@@ -1374,6 +1390,8 @@ func (r *UserReconciler) syncKubeConfig(
 		)
 		return
 	}
+	// Keep an owned copy because kubeconfig generation may update metadata on it.
+	sa = sa.DeepCopy()
 	if r.shouldRotateKubeConfig(user) {
 		if err := r.deleteBoundTokenSecret(ctx, user); err != nil {
 			state.recordSyncError(err)

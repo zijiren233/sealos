@@ -23,6 +23,7 @@ import (
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
+	"github.com/labring/sealos/controllers/user/controllers/helper/hash"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,7 +57,7 @@ func TestOptionsLimitsSecretCache(t *testing.T) {
 
 	found := false
 	for obj, byObject := range options.ByObject {
-		if _, ok := obj.(*corev1.Secret); !ok {
+		if _, ok := obj.(*metav1.PartialObjectMetadata); !ok {
 			continue
 		}
 		found = true
@@ -165,9 +166,9 @@ func TestTransformNamespaceKeepsSecurityAndOwnerMetadata(t *testing.T) {
 	}
 }
 
-func TestTransformSecretKeepsOnlyIndexMetadata(t *testing.T) {
+func TestTransformSecretMetadataKeepsOnlyIndexMetadata(t *testing.T) {
 	controller := true
-	secret := &corev1.Secret{
+	metadata := &metav1.PartialObjectMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "token-a",
 			Namespace:       config.GetUserSystemNamespace(),
@@ -181,33 +182,28 @@ func TestTransformSecretKeepsOnlyIndexMetadata(t *testing.T) {
 			}},
 			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
 		},
-		Type: corev1.SecretTypeServiceAccountToken,
-		Data: map[string][]byte{"token": []byte("sensitive-data")},
 	}
+	metadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
 
-	transformed, err := transformSecret(secret)
+	transformed, err := transformSecretMetadata(metadata)
 	if err != nil {
 		t.Fatalf("transform secret: %v", err)
 	}
-	got, ok := transformed.(*corev1.Secret)
+	got, ok := transformed.(*metav1.PartialObjectMetadata)
 	if !ok {
-		t.Fatalf("transformed type = %T, want *corev1.Secret", transformed)
+		t.Fatalf("transformed type = %T, want *metav1.PartialObjectMetadata", transformed)
 	}
-	if got.Name != secret.Name || got.Namespace != secret.Namespace || got.ResourceVersion != "42" {
+	if got.Name != metadata.Name ||
+		got.Namespace != metadata.Namespace ||
+		got.ResourceVersion != "42" {
 		t.Fatalf("required metadata was not retained: %#v", got.ObjectMeta)
 	}
 	if got.Annotations[corev1.ServiceAccountNameKey] != "user-a" || len(got.Annotations) != 1 {
 		t.Fatalf("secret index annotations = %#v", got.Annotations)
 	}
-	if !reflect.DeepEqual(got.OwnerReferences, secret.OwnerReferences) {
-		t.Fatalf(
-			"secret owner references = %#v, want %#v",
-			got.OwnerReferences,
-			secret.OwnerReferences,
-		)
-	}
-	if got.Type != "" || len(got.Data) != 0 || len(got.ManagedFields) != 0 {
-		t.Fatalf("secret payload was retained: %#v", got)
+	if !reflect.DeepEqual(got.OwnerReferences, metadata.OwnerReferences) ||
+		len(got.Labels) != 0 || len(got.ManagedFields) != 0 {
+		t.Fatalf("secret metadata projection = %#v", got.ObjectMeta)
 	}
 }
 
@@ -364,16 +360,13 @@ func TestTransformOwnerObjectsKeepsReconcileFields(t *testing.T) {
 		t.Fatalf("transform role: %v", err)
 	}
 	gotRole := transformedAs[*rbacv1.Role](t, role)
-	if !reflect.DeepEqual(
-		gotRole.Rules,
-		[]rbacv1.PolicyRule{{
-			APIGroups: []string{"*"},
-			Resources: []string{"pods"},
-			Verbs:     []string{"get"},
-		}},
-	) ||
+	wantRoleHash := hash.HashToString([]rbacv1.PolicyRule{{
+		APIGroups: []string{"*"}, Resources: []string{"pods"}, Verbs: []string{"get"},
+	}})
+	if len(gotRole.Rules) != 0 ||
+		gotRole.Annotations[config.RoleRulesHashAnnotation] != wantRoleHash ||
 		!reflect.DeepEqual(gotRole.OwnerReferences, []metav1.OwnerReference{owner}) ||
-		len(gotRole.Annotations) != 2 {
+		len(gotRole.Annotations) != 3 {
 		t.Fatalf("role reconcile fields were not retained: %#v", gotRole)
 	}
 	if len(gotRole.Labels) != 0 || len(gotRole.ManagedFields) != 0 {
