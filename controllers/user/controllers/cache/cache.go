@@ -141,17 +141,44 @@ func transformUser(obj any) (any, error) {
 		"user.sealos.io/status",
 		"user.sealos.io/type",
 	)
-	status := *user.Status.DeepCopy()
+	status := projectUserStatus(user.Status)
 	if status.KubeConfigRefreshAt == nil {
 		status.KubeConfigRefreshAt = inferKubeConfigRefreshAt(user)
 	}
-	status.KubeConfig = ""
+	spec := user.Spec
+	if user.Spec.KubeConfigRotateAt != nil {
+		rotateAt := *user.Spec.KubeConfigRotateAt
+		spec.KubeConfigRotateAt = &rotateAt
+	}
 	return &userv1.User{
 		TypeMeta:   user.TypeMeta,
 		ObjectMeta: metadata,
-		Spec:       *user.Spec.DeepCopy(),
+		Spec:       spec,
 		Status:     status,
 	}, nil
+}
+
+// projectUserStatus copies the status fields used by reconciliation and drops
+// the persisted kubeconfig before allocating a cache object.
+func projectUserStatus(status userv1.UserStatus) userv1.UserStatus {
+	projected := userv1.UserStatus{
+		Phase:                        status.Phase,
+		ObservedCSRExpirationSeconds: status.ObservedCSRExpirationSeconds,
+		ObservedKubeConfigSecretUID:  status.ObservedKubeConfigSecretUID,
+		ObservedGeneration:           status.ObservedGeneration,
+	}
+	if status.ObservedKubeConfigRotateAt != nil {
+		rotateAt := *status.ObservedKubeConfigRotateAt
+		projected.ObservedKubeConfigRotateAt = &rotateAt
+	}
+	if status.KubeConfigRefreshAt != nil {
+		refreshAt := *status.KubeConfigRefreshAt
+		projected.KubeConfigRefreshAt = &refreshAt
+	}
+	if len(status.Conditions) > 0 {
+		projected.Conditions = append([]userv1.Condition(nil), status.Conditions...)
+	}
+	return projected
 }
 
 // inferKubeConfigRefreshAt derives the refresh point from legacy JWT-backed

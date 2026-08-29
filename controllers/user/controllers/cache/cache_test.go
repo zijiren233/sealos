@@ -283,6 +283,14 @@ func TestTransformUserDropsOnlyLargeUnusedFields(t *testing.T) {
 	if user.Status.KubeConfig == "" || len(user.ManagedFields) == 0 {
 		t.Fatal("transform mutated the source user")
 	}
+	got.Spec.KubeConfigRotateAt.Time = got.Spec.KubeConfigRotateAt.Add(time.Hour)
+	got.Status.Conditions[0].Message = "changed"
+	if user.Spec.KubeConfigRotateAt.Equal(got.Spec.KubeConfigRotateAt) {
+		t.Fatal("transform shared the kubeconfig rotate timestamp")
+	}
+	if user.Status.Conditions[0].Message == "changed" {
+		t.Fatal("transform shared the conditions slice")
+	}
 }
 
 func TestTransformMetadataKeepsOnlyEventFields(t *testing.T) {
