@@ -161,8 +161,12 @@ func TestTransformNamespaceKeepsSecurityAndOwnerMetadata(t *testing.T) {
 	if !reflect.DeepEqual(got.Annotations, wantAnnotations) || len(got.ManagedFields) != 0 {
 		t.Fatalf("unused namespace metadata was retained: %#v", got.ObjectMeta)
 	}
-	if got.UID != namespace.UID || !got.CreationTimestamp.Equal(&namespace.CreationTimestamp) {
-		t.Fatalf("startup metadata was dropped: uid=%q creation=%v", got.UID, got.CreationTimestamp)
+	if got.UID != namespace.UID || !got.CreationTimestamp.IsZero() {
+		t.Fatalf(
+			"unused namespace metadata was retained: uid=%q creation=%v",
+			got.UID,
+			got.CreationTimestamp,
+		)
 	}
 }
 
@@ -178,7 +182,8 @@ func TestTransformSecretMetadataKeepsOnlyIndexMetadata(t *testing.T) {
 				"unused.example/key":         "large-value",
 			},
 			OwnerReferences: []metav1.OwnerReference{{
-				Kind: "User", Name: "user-a", UID: "user-a", Controller: &controller,
+				APIVersion: userv1.GroupVersion.String(),
+				Kind:       "User", Name: "user-a", UID: "user-a", Controller: &controller,
 			}},
 			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
 		},
@@ -347,6 +352,12 @@ func TestTransformOwnerObjectsKeepsReconcileFields(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "Owner",
 			Namespace:       "ns-alice",
+			ResourceVersion: "42",
+			Generation:      7,
+			CreationTimestamp: metav1.NewTime(
+				time.Unix(100, 0),
+			),
+			Finalizers:      []string{"unused.example/finalizer"},
 			Annotations:     annotations,
 			OwnerReferences: []metav1.OwnerReference{owner},
 		},
@@ -372,6 +383,10 @@ func TestTransformOwnerObjectsKeepsReconcileFields(t *testing.T) {
 	if len(gotRole.Labels) != 0 || len(gotRole.ManagedFields) != 0 {
 		t.Fatalf("role unused metadata was retained: %#v", gotRole.ObjectMeta)
 	}
+	if gotRole.ResourceVersion != "42" || gotRole.Generation != 0 ||
+		!gotRole.CreationTimestamp.IsZero() || len(gotRole.Finalizers) != 0 {
+		t.Fatalf("role non-reconcile metadata was retained: %#v", gotRole.ObjectMeta)
+	}
 
 	roleBinding, err := transformRoleBinding(&rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
@@ -387,9 +402,46 @@ func TestTransformOwnerObjectsKeepsReconcileFields(t *testing.T) {
 		t.Fatalf("transform role binding: %v", err)
 	}
 	gotRoleBinding := transformedAs[*rbacv1.RoleBinding](t, roleBinding)
-	if gotRoleBinding.RoleRef.Name != "Owner" || len(gotRoleBinding.Subjects) != 1 ||
-		!reflect.DeepEqual(gotRoleBinding.OwnerReferences, []metav1.OwnerReference{owner}) {
-		t.Fatalf("role binding reconcile fields were not retained: %#v", gotRoleBinding)
+	if gotRoleBinding.RoleRef.Name != "" || len(gotRoleBinding.Subjects) != 0 ||
+		gotRoleBinding.Annotations[RoleBindingSpecHashAnnotation] != RoleBindingSpecHash(
+			rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "Owner"},
+			[]rbacv1.Subject{{
+				Kind:      "ServiceAccount",
+				Name:      "alice",
+				Namespace: config.GetUserSystemNamespace(),
+			}},
+		) || !reflect.DeepEqual(gotRoleBinding.OwnerReferences, []metav1.OwnerReference{owner}) {
+		t.Fatalf("role binding projection was not compact: %#v", gotRoleBinding)
+	}
+
+	clusterRoleBinding, err := transformClusterRoleBinding(&rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations:     annotations,
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
+		},
+		Subjects: []rbacv1.Subject{
+			{Kind: "ServiceAccount", Name: "alice", Namespace: config.GetUserSystemNamespace()},
+		},
+	})
+	if err != nil {
+		t.Fatalf("transform cluster role binding: %v", err)
+	}
+	gotClusterRoleBinding := transformedAs[*rbacv1.ClusterRoleBinding](t, clusterRoleBinding)
+	if gotClusterRoleBinding.RoleRef.Name != "" || len(gotClusterRoleBinding.Subjects) != 0 ||
+		gotClusterRoleBinding.Annotations[RoleBindingSpecHashAnnotation] != RoleBindingSpecHash(
+			rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "cluster-admin"},
+			[]rbacv1.Subject{{
+				Kind:      "ServiceAccount",
+				Name:      "alice",
+				Namespace: config.GetUserSystemNamespace(),
+			}},
+		) {
+		t.Fatalf("cluster role binding projection was not compact: %#v", gotClusterRoleBinding)
 	}
 
 	serviceAccount, err := transformServiceAccount(&corev1.ServiceAccount{
@@ -436,6 +488,25 @@ func TestTransformOwnerObjectsDropsSpecForUnownedObjects(t *testing.T) {
 	gotRoleBinding := transformedAs[*rbacv1.RoleBinding](t, roleBinding)
 	if gotRoleBinding.RoleRef.Name != "" || len(gotRoleBinding.Subjects) != 0 {
 		t.Fatalf("unowned role binding spec was retained: %#v", gotRoleBinding)
+	}
+
+	legacyRoleBinding, err := transformRoleBinding(&rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				userv1.UserAnnotationOwnerKey: "alice",
+				"unused.example/key":          "unused",
+			},
+		},
+		Subjects: []rbacv1.Subject{{Kind: "User", Name: "alice"}},
+	})
+	if err != nil {
+		t.Fatalf("transform legacy role binding: %v", err)
+	}
+	gotLegacyRoleBinding := transformedAs[*rbacv1.RoleBinding](t, legacyRoleBinding)
+	if gotLegacyRoleBinding.Annotations[userv1.UserAnnotationOwnerKey] != "alice" ||
+		len(gotLegacyRoleBinding.Annotations) != 1 ||
+		len(gotLegacyRoleBinding.Subjects) != 0 {
+		t.Fatalf("legacy role binding projection lost adapter metadata: %#v", gotLegacyRoleBinding)
 	}
 }
 

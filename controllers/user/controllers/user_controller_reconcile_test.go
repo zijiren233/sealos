@@ -24,6 +24,7 @@ import (
 	"time"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	usercache "github.com/labring/sealos/controllers/user/controllers/cache"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -85,6 +86,36 @@ func reconcileTestRole(user *userv1.User, roleType userv1.RoleType) *rbacv1.Role
 			OwnerReferences: []metav1.OwnerReference{reconcileTestOwnerReference(user)},
 		},
 		Rules: config.GetUserRole(roleType),
+	}
+}
+
+func TestRoleBindingMatchesUserUsesProjectedSpecHash(t *testing.T) {
+	user := reconcileTestUser("alice")
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      user.Name,
+			Namespace: config.GetUsersNamespace(user.Name),
+			Annotations: map[string]string{
+				userv1.UserAnnotationCreatorKey: user.Name,
+				userv1.UserAnnotationOwnerKey:   "owner",
+			},
+			OwnerReferences: []metav1.OwnerReference{reconcileTestOwnerReference(user)},
+		},
+	}
+	binding.Annotations[usercache.RoleBindingSpecHashAnnotation] = usercache.RoleBindingSpecHash(
+		rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     string(userv1.OwnerRoleType),
+		},
+		config.GetUsersSubject(user.Name),
+	)
+	if !roleBindingMatchesUser(binding, user) {
+		t.Fatal("projected role binding hash was not accepted")
+	}
+	binding.Annotations[usercache.RoleBindingSpecHashAnnotation] = "drifted"
+	if roleBindingMatchesUser(binding, user) {
+		t.Fatal("drifted projected role binding hash was accepted")
 	}
 }
 

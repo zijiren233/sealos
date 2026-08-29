@@ -29,6 +29,7 @@ import (
 	"github.com/go-logr/logr"
 	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	usercache "github.com/labring/sealos/controllers/user/controllers/cache"
 	"github.com/labring/sealos/controllers/user/controllers/helper"
 	"github.com/labring/sealos/controllers/user/controllers/helper/config"
 	"github.com/labring/sealos/controllers/user/controllers/helper/finalizer"
@@ -51,7 +52,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	kubecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -411,8 +412,20 @@ func roleMatchesUser(
 }
 
 func roleBindingMatchesUser(roleBinding *rbacv1.RoleBinding, user *userv1.User) bool {
-	return metadataMatchesUserResource(roleBinding, user) &&
-		reflect.DeepEqual(roleBinding.Subjects, config.GetUsersSubject(user.Name)) &&
+	if !metadataMatchesUserResource(roleBinding, user) {
+		return false
+	}
+	if cachedSpecHash, ok := roleBinding.Annotations[usercache.RoleBindingSpecHashAnnotation]; ok {
+		return cachedSpecHash == usercache.RoleBindingSpecHash(
+			rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				Kind:     "Role",
+				Name:     string(userv1.OwnerRoleType),
+			},
+			config.GetUsersSubject(user.Name),
+		)
+	}
+	return reflect.DeepEqual(roleBinding.Subjects, config.GetUsersSubject(user.Name)) &&
 		reflect.DeepEqual(roleBinding.RoleRef, rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "Role",
@@ -421,8 +434,20 @@ func roleBindingMatchesUser(roleBinding *rbacv1.RoleBinding, user *userv1.User) 
 }
 
 func clusterRoleBindingMatchesUser(binding *rbacv1.ClusterRoleBinding, user *userv1.User) bool {
-	return metadataMatchesUserResource(binding, user) &&
-		reflect.DeepEqual(binding.Subjects, config.GetUsersSubject(user.Name)) &&
+	if !metadataMatchesUserResource(binding, user) {
+		return false
+	}
+	if cachedSpecHash, ok := binding.Annotations[usercache.RoleBindingSpecHashAnnotation]; ok {
+		return cachedSpecHash == usercache.RoleBindingSpecHash(
+			rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				Kind:     "ClusterRole",
+				Name:     "cluster-admin",
+			},
+			config.GetUsersSubject(user.Name),
+		)
+	}
+	return reflect.DeepEqual(binding.Subjects, config.GetUsersSubject(user.Name)) &&
 		reflect.DeepEqual(binding.RoleRef, rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "ClusterRole",
@@ -660,7 +685,7 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 		Complete(r)
 }
 
-func registerStartupCacheInformers(informers cache.Informers) error {
+func registerStartupCacheInformers(informers ctrlcache.Informers) error {
 	if informers == nil {
 		return errors.New("user controller cache is nil")
 	}

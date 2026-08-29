@@ -36,6 +36,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// RoleBindingSpecHashAnnotation stores the in-memory hash for a RoleBinding
+// or ClusterRoleBinding projection. It is never written back to the API.
+const RoleBindingSpecHashAnnotation = "user.sealos.io/cache-role-binding-spec-hash"
+
+type roleBindingSpec struct {
+	RoleRef  rbacv1.RoleRef
+	Subjects []rbacv1.Subject
+}
+
+// RoleBindingSpecHash returns the stable hash used by RBAC cache projections.
+func RoleBindingSpecHash(roleRef rbacv1.RoleRef, subjects []rbacv1.Subject) string {
+	return hash.HashToString(roleBindingSpec{RoleRef: roleRef, Subjects: subjects})
+}
+
 // Options keeps only explicitly registered informer data in memory. Large
 // fields are removed when controllers only need a smaller object projection.
 func Options(syncPeriod *time.Duration) ctrlcache.Options {
@@ -116,7 +130,7 @@ func transformUser(obj any) (any, error) {
 		return obj, nil
 	}
 
-	metadata := projectObjectMeta(user.ObjectMeta)
+	metadata := projectUserObjectMeta(user.ObjectMeta)
 	metadata.Finalizers = append([]string(nil), user.Finalizers...)
 	metadata.Annotations = copyMapValues(
 		user.Annotations,
@@ -265,7 +279,7 @@ func transformLicense(obj any) (any, error) {
 	}
 	return &metav1.PartialObjectMetadata{
 		TypeMeta:   metadata.TypeMeta,
-		ObjectMeta: projectObjectMeta(metadata.ObjectMeta),
+		ObjectMeta: projectEventObjectMeta(metadata.ObjectMeta),
 	}, nil
 }
 
@@ -276,7 +290,7 @@ func transformDeleteRequest(obj any) (any, error) {
 	}
 	return &metav1.PartialObjectMetadata{
 		TypeMeta:   metadata.TypeMeta,
-		ObjectMeta: projectObjectMeta(metadata.ObjectMeta),
+		ObjectMeta: projectEventObjectMeta(metadata.ObjectMeta),
 	}, nil
 }
 
@@ -287,7 +301,7 @@ func transformOperationrequest(obj any) (any, error) {
 	}
 	return &metav1.PartialObjectMetadata{
 		TypeMeta:   metadata.TypeMeta,
-		ObjectMeta: projectObjectMeta(metadata.ObjectMeta),
+		ObjectMeta: projectEventObjectMeta(metadata.ObjectMeta),
 	}, nil
 }
 
@@ -317,7 +331,7 @@ func transformRole(obj any) (any, error) {
 	}
 	if hasUserController(projected.OwnerReferences) {
 		if projected.Annotations == nil {
-			projected.Annotations = make(map[string]string)
+			projected.Annotations = make(map[string]string, 1)
 		}
 		projected.Annotations[config.RoleRulesHashAnnotation] = hash.HashToString(role.Rules)
 	}
@@ -334,8 +348,21 @@ func transformRoleBinding(obj any) (any, error) {
 		ObjectMeta: projectOwnerObjectMeta(roleBinding.ObjectMeta),
 	}
 	if hasUserController(projected.OwnerReferences) {
-		projected.RoleRef = roleBinding.RoleRef
-		projected.Subjects = append([]rbacv1.Subject(nil), roleBinding.Subjects...)
+		if projected.Annotations == nil {
+			projected.Annotations = make(map[string]string, 1)
+		}
+		projected.Annotations[RoleBindingSpecHashAnnotation] = RoleBindingSpecHash(
+			roleBinding.RoleRef,
+			roleBinding.Subjects,
+		)
+	} else {
+		// The legacy RoleBinding adapter uses the owner annotation to identify
+		// workspace bindings before it performs its uncached read.
+		projected.Annotations = copyMapValues(
+			roleBinding.Annotations,
+			userv1.UserAnnotationCreatorKey,
+			userv1.UserAnnotationOwnerKey,
+		)
 	}
 	return projected, nil
 }
@@ -350,8 +377,13 @@ func transformClusterRoleBinding(obj any) (any, error) {
 		ObjectMeta: projectOwnerObjectMeta(roleBinding.ObjectMeta),
 	}
 	if hasUserController(projected.OwnerReferences) {
-		projected.RoleRef = roleBinding.RoleRef
-		projected.Subjects = append([]rbacv1.Subject(nil), roleBinding.Subjects...)
+		if projected.Annotations == nil {
+			projected.Annotations = make(map[string]string, 1)
+		}
+		projected.Annotations[RoleBindingSpecHashAnnotation] = RoleBindingSpecHash(
+			roleBinding.RoleRef,
+			roleBinding.Subjects,
+		)
 	}
 	return projected, nil
 }
@@ -372,11 +404,12 @@ func transformNamespace(obj any) (any, error) {
 		return obj, nil
 	}
 
-	projected := metav1.ObjectMeta{
-		Name:              metadata.Name,
-		UID:               metadata.UID,
-		ResourceVersion:   metadata.ResourceVersion,
-		CreationTimestamp: metadata.CreationTimestamp,
+	projected := projectEventObjectMeta(metadata.ObjectMeta)
+	if !isUserNamespaceName(metadata.Name) {
+		return &metav1.PartialObjectMetadata{
+			TypeMeta:   metadata.TypeMeta,
+			ObjectMeta: projected,
+		}, nil
 	}
 	projected.Annotations = copyMapValues(
 		metadata.Annotations,
@@ -395,7 +428,7 @@ func transformNamespace(obj any) (any, error) {
 			projected.Labels[key] = value
 		}
 	}
-	projected.OwnerReferences = append([]metav1.OwnerReference(nil), metadata.OwnerReferences...)
+	projected.OwnerReferences = projectControllerOwnerReferences(metadata.OwnerReferences)
 	return &metav1.PartialObjectMetadata{
 		TypeMeta:   metadata.TypeMeta,
 		ObjectMeta: projected,
@@ -403,17 +436,20 @@ func transformNamespace(obj any) (any, error) {
 }
 
 func projectOwnerObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
-	projected := projectObjectMeta(in)
+	projected := projectEventObjectMeta(in)
+	projected.OwnerReferences = projectControllerOwnerReferences(in.OwnerReferences)
+	if len(projected.OwnerReferences) == 0 {
+		return projected
+	}
 	projected.Annotations = copyMapValues(
 		in.Annotations,
 		userv1.UserAnnotationCreatorKey,
 		userv1.UserAnnotationOwnerKey,
 	)
-	projected.OwnerReferences = append([]metav1.OwnerReference(nil), in.OwnerReferences...)
 	return projected
 }
 
-func projectObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
+func projectUserObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
 	out := metav1.ObjectMeta{
 		Name:              in.Name,
 		Namespace:         in.Namespace,
@@ -432,13 +468,49 @@ func projectObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
 	return out
 }
 
+func projectEventObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
+	return metav1.ObjectMeta{
+		Name:            in.Name,
+		Namespace:       in.Namespace,
+		UID:             in.UID,
+		ResourceVersion: in.ResourceVersion,
+	}
+}
+
+func projectControllerOwnerReferences(in []metav1.OwnerReference) []metav1.OwnerReference {
+	for _, reference := range in {
+		if reference.Controller == nil || !*reference.Controller ||
+			reference.APIVersion != userv1.GroupVersion.String() || reference.Kind != "User" {
+			continue
+		}
+		controller := *reference.Controller
+		reference.Controller = &controller
+		if reference.BlockOwnerDeletion != nil {
+			blockOwnerDeletion := *reference.BlockOwnerDeletion
+			reference.BlockOwnerDeletion = &blockOwnerDeletion
+		}
+		return []metav1.OwnerReference{reference}
+	}
+	return nil
+}
+
+func isUserNamespaceName(name string) bool {
+	return strings.HasPrefix(name, "ns-") && len(name) > len("ns-")
+}
+
 func copyMapValues(source map[string]string, keys ...string) map[string]string {
-	var result map[string]string
+	count := 0
+	for _, key := range keys {
+		if _, ok := source[key]; ok {
+			count++
+		}
+	}
+	if count == 0 {
+		return nil
+	}
+	result := make(map[string]string, count)
 	for _, key := range keys {
 		if value, ok := source[key]; ok {
-			if result == nil {
-				result = make(map[string]string)
-			}
 			result[key] = value
 		}
 	}
@@ -452,9 +524,11 @@ func transformSecretMetadata(obj any) (any, error) {
 	}
 	projected := &metav1.PartialObjectMetadata{
 		TypeMeta:   metadata.TypeMeta,
-		ObjectMeta: projectObjectMeta(metadata.ObjectMeta),
+		ObjectMeta: projectEventObjectMeta(metadata.ObjectMeta),
 	}
+	projected.OwnerReferences = projectControllerOwnerReferences(metadata.OwnerReferences)
+	// Legacy token cleanup indexes all Secrets by this annotation, including
+	// Secrets that predate User owner references.
 	projected.Annotations = copyMapValues(metadata.Annotations, corev1.ServiceAccountNameKey)
-	projected.OwnerReferences = append([]metav1.OwnerReference(nil), metadata.OwnerReferences...)
 	return projected, nil
 }
