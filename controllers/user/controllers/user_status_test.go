@@ -216,42 +216,6 @@ func TestNamespacePodSecurityPredicate(t *testing.T) {
 	}
 }
 
-func TestCachedUserRequeueUsesStableDeadline(t *testing.T) {
-	t.Parallel()
-	r := &UserReconciler{
-		minRequeueDuration: time.Hour,
-		maxRequeueDuration: time.Hour,
-	}
-	r.recordKubeConfigSync("alice", time.Hour, false)
-	firstValue, ok := r.nextKubeConfigSync.Load("alice")
-	if !ok {
-		t.Fatal("initial kubeconfig deadline was not recorded")
-	}
-	first, ok := firstValue.(time.Time)
-	if !ok {
-		t.Fatalf("initial kubeconfig deadline type = %T", firstValue)
-	}
-	r.recordKubeConfigSync("alice", time.Hour, false)
-	secondValue, ok := r.nextKubeConfigSync.Load("alice")
-	second, secondOK := secondValue.(time.Time)
-	if !ok || !secondOK || !second.Equal(first) {
-		t.Fatalf(
-			"unrelated reconcile moved kubeconfig deadline: first=%s second=%v",
-			first,
-			secondValue,
-		)
-	}
-	r.recordKubeConfigSync("alice", time.Hour, true)
-	thirdValue, ok := r.nextKubeConfigSync.Load("alice")
-	third, thirdOK := thirdValue.(time.Time)
-	if !ok || !thirdOK {
-		t.Fatalf("updated kubeconfig deadline type = %T", thirdValue)
-	}
-	if !third.After(first) {
-		t.Fatalf("kubeconfig sync did not reset deadline: first=%s third=%s", first, third)
-	}
-}
-
 func TestKubeConfigSyncDueUsesPersistedRefreshAt(t *testing.T) {
 	t.Parallel()
 	r := &UserReconciler{}
@@ -351,16 +315,44 @@ func TestSetObservedCSRExpirationSecondsNormalizesOnlyDuringRefresh(t *testing.T
 func TestFailedKubeConfigSyncRetriesImmediately(t *testing.T) {
 	t.Parallel()
 	r := &UserReconciler{}
-	r.recordKubeConfigSync("alice", time.Hour, true)
+	user := &userv1.User{ObjectMeta: metav1.ObjectMeta{Name: "alice"}}
 	state := &userReconcileState{kubeConfigSyncAttempted: true}
 	state.recordSyncError(errors.New("token request failed"))
-	if err := r.finishKubeConfigSync("alice", state, time.Hour); err == nil {
+	if err := r.finishKubeConfigSync(user, state); err == nil {
 		t.Fatal("failed kubeconfig sync did not return its error")
 	}
 	value, ok := r.nextKubeConfigSync.Load("alice")
 	deadline, deadlineOK := value.(time.Time)
 	if !ok || !deadlineOK || deadline.After(time.Now()) {
 		t.Fatalf("failed kubeconfig sync deadline = %v, want due now", value)
+	}
+}
+
+func TestSuccessfulKubeConfigSyncUsesPersistedRefreshDeadline(t *testing.T) {
+	t.Parallel()
+	r := &UserReconciler{}
+	refreshAt := metav1.NewTime(time.Now().Add(30 * 24 * time.Hour))
+	user := &userv1.User{
+		ObjectMeta: metav1.ObjectMeta{Name: "alice"},
+		Status: userv1.UserStatus{
+			KubeConfigRefreshAt: &refreshAt,
+		},
+	}
+	state := &userReconcileState{
+		kubeConfigSyncAttempted: true,
+		kubeConfigSynced:        true,
+	}
+
+	if err := r.finishKubeConfigSync(user, state); err != nil {
+		t.Fatalf("successful kubeconfig sync returned an error: %v", err)
+	}
+	value, ok := r.nextKubeConfigSync.Load(user.Name)
+	deadline, deadlineOK := value.(time.Time)
+	if !ok || !deadlineOK {
+		t.Fatalf("kubeconfig deadline = %v, want persisted refresh time", value)
+	}
+	if !deadline.Equal(refreshAt.Time) {
+		t.Fatalf("kubeconfig deadline = %s, want %s", deadline, refreshAt.Time)
 	}
 }
 

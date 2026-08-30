@@ -353,22 +353,6 @@ func (r *UserReconciler) kubeConfigSyncDue(user *userv1.User) bool {
 	return !user.Status.KubeConfigRefreshAt.After(time.Now())
 }
 
-func (r *UserReconciler) recordKubeConfigSync(
-	userName string,
-	requeueAfter time.Duration,
-	reset bool,
-) {
-	if requeueAfter <= 0 {
-		return
-	}
-	deadline := time.Now().Add(requeueAfter)
-	if reset {
-		r.nextKubeConfigSync.Store(userName, deadline)
-		return
-	}
-	r.nextKubeConfigSync.LoadOrStore(userName, deadline)
-}
-
 func namespaceMatchesUser(
 	namespace metav1.Object,
 	user *userv1.User,
@@ -775,7 +759,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 	}
 	if !statusChanged {
 		requeueAfter := r.nextRequeueDuration(user, state)
-		if syncErr := r.finishKubeConfigSync(user.Name, state, requeueAfter); syncErr != nil {
+		if syncErr := r.finishKubeConfigSync(user, state); syncErr != nil {
 			return ctrl.Result{}, syncErr
 		}
 		if state.syncError != nil {
@@ -799,7 +783,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 		return ctrl.Result{}, err
 	}
 	requeueAfter := r.nextRequeueDuration(user, state)
-	if syncErr := r.finishKubeConfigSync(user.Name, state, requeueAfter); syncErr != nil {
+	if syncErr := r.finishKubeConfigSync(user, state); syncErr != nil {
 		return ctrl.Result{}, syncErr
 	}
 	if state.syncError != nil {
@@ -809,11 +793,10 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 }
 
 func (r *UserReconciler) finishKubeConfigSync(
-	userName string,
+	user *userv1.User,
 	state *userReconcileState,
-	requeueAfter time.Duration,
 ) error {
-	if state == nil {
+	if state == nil || user == nil {
 		return nil
 	}
 	if !state.kubeConfigSyncAttempted {
@@ -822,10 +805,18 @@ func (r *UserReconciler) finishKubeConfigSync(
 	if !state.kubeConfigSynced {
 		// Keep the in-memory deadline due so the next workqueue retry does not
 		// get hidden by a future persisted refresh time.
-		r.nextKubeConfigSync.Store(userName, time.Now())
+		r.nextKubeConfigSync.Store(user.Name, time.Now())
 		return state.syncError
 	}
-	r.recordKubeConfigSync(userName, requeueAfter, true)
+	if user.Status.KubeConfigRefreshAt == nil || user.Status.KubeConfigRefreshAt.IsZero() {
+		// A successful refresh always persists this field. Clearing the entry
+		// keeps a malformed in-memory state from suppressing a retry.
+		r.nextKubeConfigSync.Delete(user.Name)
+		return nil
+	}
+	// The workqueue requeue interval is for ordinary drift checks. Kubeconfig
+	// refreshes must follow the persisted token deadline instead.
+	r.nextKubeConfigSync.Store(user.Name, user.Status.KubeConfigRefreshAt.Time)
 	return nil
 }
 
