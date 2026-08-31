@@ -51,7 +51,7 @@ func (sac *ServiceAccountConfig) ApplyWithTokenRequest(
 	config *rest.Config,
 	client client.Client,
 ) (*api.Config, metav1.Time, error) {
-	if err := sac.applyServiceAccount(config, client); err != nil {
+	if err := sac.applyServiceAccount(ctx, config, client); err != nil {
 		return nil, metav1.Time{}, fmt.Errorf("failed to apply service account error: %w", err)
 	}
 	boundSecret, err := sac.applyBoundTokenSecret(ctx, client)
@@ -69,7 +69,11 @@ func (sac *ServiceAccountConfig) ApplyWithTokenRequest(
 	return cfg, tokenRequest.Status.ExpirationTimestamp, nil
 }
 
-func (sac *ServiceAccountConfig) applyServiceAccount(_ *rest.Config, client client.Client) error {
+func (sac *ServiceAccountConfig) applyServiceAccount(
+	ctx context.Context,
+	_ *rest.Config,
+	client client.Client,
+) error {
 	sa := sac.sa
 	if sa == nil {
 		sa = &v1.ServiceAccount{
@@ -85,7 +89,7 @@ func (sac *ServiceAccountConfig) applyServiceAccount(_ *rest.Config, client clie
 	if sa.Namespace == "" {
 		sa.Namespace = sac.namespace
 	}
-	_, err := controllerutil.CreateOrUpdate(context.TODO(), client, sa, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, client, sa, func() error {
 		if sac.forceNewSecret || len(sa.Secrets) == 0 {
 			sa.Secrets = []v1.ObjectReference{
 				{
