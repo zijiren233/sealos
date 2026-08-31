@@ -635,9 +635,12 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 		&userv1.User{},
 		handler.OnlyControllerOwner(),
 	)
+	// Preserve the name derived from For(&userv1.User{}) for metrics and queue identity.
 	return ctrl.NewControllerManagedBy(mgr).
-		For(
+		Named("user").
+		Watches(
 			&userv1.User{},
+			userEventHandler{},
 			builder.WithPredicates(predicate.Or(
 				predicate.GenerationChangedPredicate{},
 				OwnerAnnotationChangedPredicate{},
@@ -1706,7 +1709,15 @@ func (r *UserReconciler) handleLicenseLimit(
 }
 
 func (r *UserReconciler) isNewUser(user *userv1.User) bool {
-	return user.Status.ObservedGeneration == 0 && len(user.Status.Conditions) == 0
+	if user == nil || user.Status.ObservedGeneration != 0 {
+		return false
+	}
+	for _, condition := range user.Status.Conditions {
+		if condition.Type != licenseLimitedCondition {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *UserReconciler) nextRequeueDuration(
