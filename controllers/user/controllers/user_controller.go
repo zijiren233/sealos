@@ -193,6 +193,9 @@ type AdminClusterRoleBindingPredicate struct {
 // TODO: after upgrading controller-runtime to v0.22+, use
 // event.CreateEvent.IsInInitialList and coalesce initial events for the same
 // User with a bounded debounce before enqueueing one reconciliation request.
+// When the minimum supported API server provides WatchList, validate its
+// compatibility and fallback behavior before enabling client-go's
+// KUBE_FEATURE_WatchListClient to reduce initial LIST peak memory.
 type ignorePreStartCreatePredicate struct {
 	predicate.Funcs
 	startedAt time.Time
