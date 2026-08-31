@@ -185,7 +185,7 @@ func inferKubeConfigRefreshAt(user *userv1.User) *metav1.Time {
 	}
 	config, err := clientcmd.Load([]byte(user.Status.KubeConfig))
 	if err != nil {
-		return inferLegacyRefreshAt(user)
+		return nil
 	}
 	info, ok := config.AuthInfos[user.Name]
 	if !ok || info == nil {
@@ -204,11 +204,11 @@ func inferKubeConfigRefreshAt(user *userv1.User) *metav1.Time {
 	}
 	block, _ := pem.Decode(info.ClientCertificateData)
 	if block == nil {
-		return inferLegacyRefreshAt(user)
+		return nil
 	}
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return inferLegacyRefreshAt(user)
+		return nil
 	}
 	return refreshAtFromIssuedAt(certificate.NotBefore, certificate.NotAfter)
 }
@@ -482,10 +482,11 @@ func projectUserObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
 
 func projectEventObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
-		Name:            in.Name,
-		Namespace:       in.Namespace,
-		UID:             in.UID,
-		ResourceVersion: in.ResourceVersion,
+		Name:              in.Name,
+		Namespace:         in.Namespace,
+		UID:               in.UID,
+		ResourceVersion:   in.ResourceVersion,
+		CreationTimestamp: in.CreationTimestamp,
 	}
 }
 
