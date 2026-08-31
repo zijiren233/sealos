@@ -18,6 +18,7 @@ package kubeconfig
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
@@ -30,6 +31,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+type canceledContextClient struct {
+	client.Client
+}
+
+func (c canceledContextClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("service account read did not receive the canceled context")
+}
 
 func TestNewConfigNormalizesBelowMinimumExpiration(t *testing.T) {
 	t.Parallel()
@@ -196,7 +213,7 @@ func TestServiceAccountConfigWithForceNewSecret(t *testing.T) {
 		forceNewSecret: true,
 	}
 
-	if err := cfg.applyServiceAccount(nil, cli); err != nil {
+	if err := cfg.applyServiceAccount(context.Background(), nil, cli); err != nil {
 		t.Fatalf("apply service account: %v", err)
 	}
 	if len(cfg.sa.Secrets) != 1 {
@@ -211,6 +228,21 @@ func TestServiceAccountConfigWithForceNewSecret(t *testing.T) {
 			cfg.secretName,
 			cfg.sa.Secrets[0].Name,
 		)
+	}
+}
+
+func TestApplyServiceAccountPropagatesCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cfg := &ServiceAccountConfig{
+		DefaultConfig: &DefaultConfig{user: "alice"},
+		namespace:     "user-system",
+	}
+	err := cfg.applyServiceAccount(ctx, nil, canceledContextClient{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("apply service account error = %v, want context canceled", err)
 	}
 }
 
