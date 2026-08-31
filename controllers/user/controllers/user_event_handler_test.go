@@ -128,3 +128,35 @@ func TestAddUserRequestUsesCallerPriority(t *testing.T) {
 		t.Fatalf("priority = %d, want caller priority 42", priority)
 	}
 }
+
+func TestIgnorePreStartCreatePredicate(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Unix(1_000, 0)
+	predicate := ignorePreStartCreatePredicate{startedAt: startedAt}
+	tests := []struct {
+		name      string
+		createdAt time.Time
+		want      bool
+	}{
+		{name: "before controller start", createdAt: startedAt.Add(-time.Nanosecond)},
+		{name: "at controller start", createdAt: startedAt, want: true},
+		{name: "after controller start", createdAt: startedAt.Add(time.Second), want: true},
+		{name: "missing timestamp", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			obj := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+				CreationTimestamp: metav1.NewTime(tt.createdAt),
+			}}
+			if got := predicate.Create(event.CreateEvent{Object: obj}); got != tt.want {
+				t.Fatalf("Create() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+	if predicate.Create(event.CreateEvent{}) {
+		t.Fatal("nil Create object was accepted")
+	}
+}
