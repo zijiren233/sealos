@@ -175,6 +175,10 @@ type OwnerAnnotationChangedPredicate struct {
 	predicate.Funcs
 }
 
+type DeletionTimestampChangedPredicate struct {
+	predicate.Funcs
+}
+
 // NamespacePodSecurityPredicate reconciles ns-* namespaces when their
 // Pod Security Admission labels or User ownership metadata changes.
 type NamespacePodSecurityPredicate struct {
@@ -588,6 +592,13 @@ func (OwnerAnnotationChangedPredicate) Update(e event.UpdateEvent) bool {
 		e.ObjectNew.GetAnnotations()[userAnnotationOwnerKey]
 }
 
+func (DeletionTimestampChangedPredicate) Update(e event.UpdateEvent) bool {
+	return !reflect.DeepEqual(
+		e.ObjectOld.GetDeletionTimestamp(),
+		e.ObjectNew.GetDeletionTimestamp(),
+	)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 // The deprecated max-requeue-duration and restart-predicate-time arguments are
 // retained for compatibility and ignored.
@@ -670,6 +681,7 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 			builder.WithPredicates(predicate.Or(
 				predicate.GenerationChangedPredicate{},
 				OwnerAnnotationChangedPredicate{},
+				DeletionTimestampChangedPredicate{},
 			)),
 		).
 		WatchesMetadata(
@@ -1190,7 +1202,7 @@ func (r *UserReconciler) createRole(
 func (r *UserReconciler) syncRoleBinding(
 	ctx context.Context,
 	user *userv1.User,
-	_ *userReconcileState,
+	state *userReconcileState,
 ) {
 	roleBindingConditionType := userv1.ConditionType("RoleBindingSyncReady")
 	rbCondition := &userv1.Condition{
@@ -1238,6 +1250,7 @@ func (r *UserReconciler) syncRoleBinding(
 		)
 		return nil
 	}); err != nil {
+		state.recordSyncError(err)
 		helper.SetConditionError(rbCondition, "SyncUserError", err)
 		r.Recorder.Eventf(
 			user,

@@ -16,6 +16,7 @@ package cache
 
 import (
 	"encoding/base64"
+	"encoding/pem"
 	"reflect"
 	"strconv"
 	"testing"
@@ -161,9 +162,10 @@ func TestTransformNamespaceKeepsSecurityAndOwnerMetadata(t *testing.T) {
 	if !reflect.DeepEqual(got.Annotations, wantAnnotations) || len(got.ManagedFields) != 0 {
 		t.Fatalf("unused namespace metadata was retained: %#v", got.ObjectMeta)
 	}
-	if got.UID != namespace.UID || !got.CreationTimestamp.IsZero() {
+	if got.UID != namespace.UID ||
+		!got.CreationTimestamp.Equal(&namespace.CreationTimestamp) {
 		t.Fatalf(
-			"unused namespace metadata was retained: uid=%q creation=%v",
+			"required namespace event metadata was not retained: uid=%q creation=%v",
 			got.UID,
 			got.CreationTimestamp,
 		)
@@ -332,16 +334,24 @@ func TestTransformMetadataKeepsOnlyEventFields(t *testing.T) {
 		t.Fatalf("unused metadata was retained: %#v", got.ObjectMeta)
 	}
 
-	keyOnly, err := transformDeleteRequest(metadata)
-	if err != nil {
-		t.Fatalf("transform delete request metadata: %v", err)
-	}
-	gotKey, ok := keyOnly.(*metav1.PartialObjectMetadata)
-	if !ok {
-		t.Fatalf("key metadata type = %T, want *metav1.PartialObjectMetadata", keyOnly)
-	}
-	if len(gotKey.OwnerReferences) != 0 || len(gotKey.Annotations) != 0 {
-		t.Fatalf("key-only ownership metadata was retained: %#v", gotKey.ObjectMeta)
+	for _, transform := range []func(any) (any, error){
+		transformDeleteRequest,
+		transformOperationrequest,
+	} {
+		keyOnly, err := transform(metadata)
+		if err != nil {
+			t.Fatalf("transform request metadata: %v", err)
+		}
+		gotKey, ok := keyOnly.(*metav1.PartialObjectMetadata)
+		if !ok {
+			t.Fatalf("key metadata type = %T, want *metav1.PartialObjectMetadata", keyOnly)
+		}
+		if len(gotKey.OwnerReferences) != 0 || len(gotKey.Annotations) != 0 {
+			t.Fatalf("key-only ownership metadata was retained: %#v", gotKey.ObjectMeta)
+		}
+		if !gotKey.CreationTimestamp.Equal(&metadata.CreationTimestamp) {
+			t.Fatalf("key-only event creation timestamp = %v", gotKey.CreationTimestamp)
+		}
 	}
 }
 
@@ -654,6 +664,48 @@ func TestTransformUserInfersLegacyRefreshWhenAuthInfoIsUnrecognized(t *testing.T
 	if refreshAt == nil || !refreshAt.Equal(&want) {
 		t.Fatalf("legacy refresh time = %v, want %v", refreshAt, want)
 	}
+}
+
+func TestTransformUserDoesNotInferRefreshFromMalformedKubeConfig(t *testing.T) {
+	rotation := metav1.NewTime(time.Now().Add(-time.Hour))
+	for _, kubeConfig := range []string{
+		"not: [valid",
+		string(mustWriteKubeConfig(t, &clientcmdapi.AuthInfo{
+			ClientCertificateData: []byte("not a certificate"),
+		})),
+		string(mustWriteKubeConfig(t, &clientcmdapi.AuthInfo{
+			ClientCertificateData: pem.EncodeToMemory(&pem.Block{
+				Type: "CERTIFICATE", Bytes: []byte("not certificate DER"),
+			}),
+		})),
+	} {
+		user := &userv1.User{
+			ObjectMeta: metav1.ObjectMeta{Name: "alice"},
+			Status: userv1.UserStatus{
+				KubeConfig:                 kubeConfig,
+				ObservedKubeConfigRotateAt: &rotation,
+			},
+		}
+		transformed, err := transformUser(user)
+		if err != nil {
+			t.Fatalf("transform malformed user: %v", err)
+		}
+		transformedUser := transformedAs[*userv1.User](t, transformed)
+		if refreshAt := transformedUser.Status.KubeConfigRefreshAt; refreshAt != nil {
+			t.Fatalf("malformed kubeconfig refresh time = %v, want nil", refreshAt)
+		}
+	}
+}
+
+func mustWriteKubeConfig(t *testing.T, authInfo *clientcmdapi.AuthInfo) []byte {
+	t.Helper()
+	data, err := clientcmd.Write(clientcmdapi.Config{AuthInfos: map[string]*clientcmdapi.AuthInfo{
+		"alice": authInfo,
+	}})
+	if err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	return data
 }
 
 func TestUncachedObjects(t *testing.T) {

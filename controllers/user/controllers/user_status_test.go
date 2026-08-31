@@ -77,6 +77,21 @@ func (c roleSyncErrorClient) Update(
 	return c.Client.Update(ctx, obj, opts...)
 }
 
+type roleBindingSyncErrorClient struct {
+	client.Client
+}
+
+func (c roleBindingSyncErrorClient) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
+	if _, ok := obj.(*rbacv1.RoleBinding); ok {
+		return errors.New("role binding create failed")
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
 func TestUpdateStatusPreservesUncachedKubeConfig(t *testing.T) {
 	t.Parallel()
 
@@ -145,6 +160,23 @@ func TestOwnerAnnotationChangedPredicate(t *testing.T) {
 	newUser.Annotations[userv1.UserAnnotationOwnerKey] = "owner-b"
 	if !predicate.Update(event.UpdateEvent{ObjectOld: oldUser, ObjectNew: newUser}) {
 		t.Fatal("owner annotation change did not trigger reconciliation")
+	}
+}
+
+func TestDeletionTimestampChangedPredicate(t *testing.T) {
+	t.Parallel()
+
+	oldUser := &userv1.User{}
+	newUser := oldUser.DeepCopy()
+	predicate := DeletionTimestampChangedPredicate{}
+	if predicate.Update(event.UpdateEvent{ObjectOld: oldUser, ObjectNew: newUser}) {
+		t.Fatal("unchanged deletion timestamp triggered reconciliation")
+	}
+
+	now := metav1.Now()
+	newUser.DeletionTimestamp = &now
+	if !predicate.Update(event.UpdateEvent{ObjectOld: oldUser, ObjectNew: newUser}) {
+		t.Fatal("deletion timestamp change did not trigger reconciliation")
 	}
 }
 
@@ -624,6 +656,38 @@ func TestRoleSyncFailureUpdatesRoleCondition(t *testing.T) {
 	}
 	if condition.Reason != "SyncUserError" {
 		t.Fatalf("role condition reason = %q, want SyncUserError", condition.Reason)
+	}
+}
+
+func TestRoleBindingSyncFailureRecordsRetryableError(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	if err := userv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add user scheme: %v", err)
+	}
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add RBAC scheme: %v", err)
+	}
+	user := &userv1.User{
+		ObjectMeta: metav1.ObjectMeta{Name: "alice", UID: "user-a"},
+	}
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(user).Build()
+	r := &UserReconciler{
+		Client:   roleBindingSyncErrorClient{Client: baseClient},
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+	state := &userReconcileState{}
+	r.syncRoleBindingIfNeeded(context.Background(), user, state)
+	if state.syncError == nil {
+		t.Fatal("role binding sync failure was not recorded")
+	}
+	condition := helper.GetCondition(
+		user.Status.Conditions,
+		&userv1.Condition{Type: roleBindingReadyCondition},
+	)
+	if condition.Status != corev1.ConditionFalse {
+		t.Fatalf("role binding condition status = %s, want False", condition.Status)
 	}
 }
 
