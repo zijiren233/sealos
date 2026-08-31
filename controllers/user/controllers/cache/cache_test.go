@@ -174,9 +174,10 @@ func TestTransformSecretMetadataKeepsOnlyIndexMetadata(t *testing.T) {
 	controller := true
 	metadata := &metav1.PartialObjectMetadata{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "token-a",
-			Namespace:       config.GetUserSystemNamespace(),
-			ResourceVersion: "42",
+			Name:              "token-a",
+			Namespace:         config.GetUserSystemNamespace(),
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(time.Unix(100, 0)),
 			Annotations: map[string]string{
 				corev1.ServiceAccountNameKey: "user-a",
 				"unused.example/key":         "large-value",
@@ -200,7 +201,8 @@ func TestTransformSecretMetadataKeepsOnlyIndexMetadata(t *testing.T) {
 	}
 	if got.Name != metadata.Name ||
 		got.Namespace != metadata.Namespace ||
-		got.ResourceVersion != "42" {
+		got.ResourceVersion != "42" ||
+		!got.CreationTimestamp.Equal(&metadata.CreationTimestamp) {
 		t.Fatalf("required metadata was not retained: %#v", got.ObjectMeta)
 	}
 	if got.Annotations[corev1.ServiceAccountNameKey] != "user-a" || len(got.Annotations) != 1 {
@@ -296,14 +298,15 @@ func TestTransformUserDropsOnlyLargeUnusedFields(t *testing.T) {
 func TestTransformMetadataKeepsOnlyEventFields(t *testing.T) {
 	metadata := &metav1.PartialObjectMetadata{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "role-a",
-			Namespace:       "ns-a",
-			ResourceVersion: "42",
-			Annotations:     map[string]string{"unused.example/key": "unused"},
-			Labels:          map[string]string{"unused.example/key": "unused"},
-			Finalizers:      []string{"unused.example/finalizer"},
-			ManagedFields:   []metav1.ManagedFieldsEntry{{Manager: "test"}},
-			OwnerReferences: []metav1.OwnerReference{{Name: "user-a"}},
+			Name:              "role-a",
+			Namespace:         "ns-a",
+			ResourceVersion:   "42",
+			CreationTimestamp: metav1.NewTime(time.Unix(100, 0)),
+			Annotations:       map[string]string{"unused.example/key": "unused"},
+			Labels:            map[string]string{"unused.example/key": "unused"},
+			Finalizers:        []string{"unused.example/finalizer"},
+			ManagedFields:     []metav1.ManagedFieldsEntry{{Manager: "test"}},
+			OwnerReferences:   []metav1.OwnerReference{{Name: "user-a"}},
 		},
 	}
 	metadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
@@ -317,7 +320,8 @@ func TestTransformMetadataKeepsOnlyEventFields(t *testing.T) {
 		t.Fatalf("transformed type = %T, want *metav1.PartialObjectMetadata", transformed)
 	}
 	if got.GroupVersionKind() != metadata.GroupVersionKind() || got.Name != metadata.Name ||
-		got.Namespace != metadata.Namespace || got.ResourceVersion != metadata.ResourceVersion {
+		got.Namespace != metadata.Namespace || got.ResourceVersion != metadata.ResourceVersion ||
+		!got.CreationTimestamp.Equal(&metadata.CreationTimestamp) {
 		t.Fatalf("required event metadata was not retained: %#v", got)
 	}
 	if len(got.OwnerReferences) != 0 ||
@@ -392,7 +396,8 @@ func TestTransformOwnerObjectsKeepsReconcileFields(t *testing.T) {
 		t.Fatalf("role unused metadata was retained: %#v", gotRole.ObjectMeta)
 	}
 	if gotRole.ResourceVersion != "42" || gotRole.Generation != 0 ||
-		!gotRole.CreationTimestamp.IsZero() || len(gotRole.Finalizers) != 0 {
+		!gotRole.CreationTimestamp.Equal(&metav1.Time{Time: time.Unix(100, 0)}) ||
+		len(gotRole.Finalizers) != 0 {
 		t.Fatalf("role non-reconcile metadata was retained: %#v", gotRole.ObjectMeta)
 	}
 

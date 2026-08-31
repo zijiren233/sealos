@@ -304,9 +304,11 @@ func transformLicense(obj any) (any, error) {
 	if !ok {
 		return obj, nil
 	}
+	projected := projectEventObjectMeta(metadata.ObjectMeta)
+	projected.CreationTimestamp = metadata.CreationTimestamp
 	return &metav1.PartialObjectMetadata{
 		TypeMeta:   metadata.TypeMeta,
-		ObjectMeta: projectEventObjectMeta(metadata.ObjectMeta),
+		ObjectMeta: projected,
 	}, nil
 }
 
@@ -464,6 +466,7 @@ func transformNamespace(obj any) (any, error) {
 
 func projectOwnerObjectMeta(in metav1.ObjectMeta) metav1.ObjectMeta {
 	projected := projectEventObjectMeta(in)
+	projected.CreationTimestamp = in.CreationTimestamp
 	projected.OwnerReferences = projectControllerOwnerReferences(in.OwnerReferences)
 	if len(projected.OwnerReferences) == 0 {
 		return projected
@@ -553,6 +556,7 @@ func transformSecretMetadata(obj any) (any, error) {
 		TypeMeta:   metadata.TypeMeta,
 		ObjectMeta: projectEventObjectMeta(metadata.ObjectMeta),
 	}
+	projected.CreationTimestamp = metadata.CreationTimestamp
 	projected.OwnerReferences = projectControllerOwnerReferences(metadata.OwnerReferences)
 	// Legacy token cleanup indexes all Secrets by this annotation, including
 	// Secrets that predate User owner references.

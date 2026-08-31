@@ -185,6 +185,30 @@ type AdminClusterRoleBindingPredicate struct {
 	predicate.Funcs
 }
 
+// ignorePreStartCreatePredicate drops Create events for objects that already
+// existed when this controller was configured. Existing Users re-evaluate the
+// shared License and verify their children during startup. The manager starts
+// each informer once; watch reconnects relist through the same informer.
+//
+// TODO: after upgrading controller-runtime to v0.22+, use
+// event.CreateEvent.IsInInitialList and coalesce initial events for the same
+// User with a bounded debounce before enqueueing one reconciliation request.
+type ignorePreStartCreatePredicate struct {
+	predicate.Funcs
+	startedAt time.Time
+}
+
+func (p ignorePreStartCreatePredicate) Create(e event.CreateEvent) bool {
+	if e.Object == nil {
+		return false
+	}
+	createdAt := e.Object.GetCreationTimestamp().Time
+	if p.startedAt.IsZero() || createdAt.IsZero() {
+		return true
+	}
+	return !createdAt.Before(p.startedAt)
+}
+
 func (AdminClusterRoleBindingPredicate) Create(e event.CreateEvent) bool {
 	return e.Object.GetName() == adminClusterRoleBindingName
 }
@@ -568,6 +592,7 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 	minRequeueDuration, _, _ time.Duration,
 	userCounter *usercount.Counter,
 ) error {
+	controllerStartedAt := time.Now()
 	const controllerName = "user_controller"
 	if r.Client == nil {
 		r.Client = mgr.GetClient()
@@ -632,6 +657,7 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 		&userv1.User{},
 		handler.OnlyControllerOwner(),
 	)
+	ignorePreStartCreate := ignorePreStartCreatePredicate{startedAt: controllerStartedAt}
 	// Preserve the name derived from For(&userv1.User{}) for metrics and queue identity.
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("user").
@@ -657,11 +683,28 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 			&licensev1.License{},
 			handler.EnqueueRequestsFromMapFunc(r.licenseToUserRequests),
 			builder.OnlyMetadata,
+			builder.WithPredicates(ignorePreStartCreate),
 		).
-		Watches(&rbacv1.Role{}, ownerEventHandler).
-		Watches(&rbacv1.RoleBinding{}, ownerEventHandler).
-		Watches(&v1.ServiceAccount{}, ownerEventHandler).
-		WatchesMetadata(&v1.Secret{}, ownerEventHandler).
+		Watches(
+			&rbacv1.Role{},
+			ownerEventHandler,
+			builder.WithPredicates(ignorePreStartCreate),
+		).
+		Watches(
+			&rbacv1.RoleBinding{},
+			ownerEventHandler,
+			builder.WithPredicates(ignorePreStartCreate),
+		).
+		Watches(
+			&v1.ServiceAccount{},
+			ownerEventHandler,
+			builder.WithPredicates(ignorePreStartCreate),
+		).
+		WatchesMetadata(
+			&v1.Secret{},
+			ownerEventHandler,
+			builder.WithPredicates(ignorePreStartCreate),
+		).
 		WithOptions(kubecontroller.Options{
 			MaxConcurrentReconciles: ratelimiter.GetConcurrent(opts),
 			RateLimiter:             ratelimiter.GetRateLimiter(opts),
