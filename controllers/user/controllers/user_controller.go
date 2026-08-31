@@ -38,7 +38,6 @@ import (
 	"github.com/labring/sealos/controllers/user/controllers/helper/ratelimiter"
 	"github.com/labring/sealos/controllers/user/pkg/licensegate"
 	"github.com/labring/sealos/controllers/user/pkg/usercount"
-	"golang.org/x/exp/rand"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -88,7 +87,6 @@ type UserReconciler struct {
 	client.Client
 	finalizer          *finalizer.Finalizer
 	minRequeueDuration time.Duration
-	maxRequeueDuration time.Duration
 	nextKubeConfigSync sync.Map
 	// EnableAdminClusterAdmin preserves the legacy cluster-admin binding for
 	// the admin user when explicitly enabled. It is disabled by default.
@@ -564,10 +562,10 @@ func (OwnerAnnotationChangedPredicate) Update(e event.UpdateEvent) bool {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-// The deprecated restart-predicate-time argument is retained for compatibility
-// and ignored.
+// The deprecated max-requeue-duration and restart-predicate-time arguments are
+// retained for compatibility and ignored.
 func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.RateLimiterOptions,
-	minRequeueDuration, maxRequeueDuration, _ time.Duration,
+	minRequeueDuration, _, _ time.Duration,
 	userCounter *usercount.Counter,
 ) error {
 	const controllerName = "user_controller"
@@ -588,7 +586,6 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager, opts ratelimiter.Rat
 	r.config = mgr.GetConfig()
 	r.Logger.V(1).Info("init reconcile controller user")
 	r.minRequeueDuration = minRequeueDuration
-	r.maxRequeueDuration = maxRequeueDuration
 
 	if err := mgr.Add(&adminPrivilegeMigration{
 		client:                  r.Client,
@@ -761,7 +758,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 		setObservedCSRExpirationSeconds(user)
 	}
 	if !statusChanged {
-		requeueAfter := r.nextRequeueDuration(user, state)
+		requeueAfter := nextKubeConfigRequeueDuration(user, state)
 		if syncErr := r.finishKubeConfigSync(user, state); syncErr != nil {
 			return ctrl.Result{}, syncErr
 		}
@@ -785,7 +782,7 @@ func (r *UserReconciler) reconcile(ctx context.Context, obj client.Object) (ctrl
 		)
 		return ctrl.Result{}, err
 	}
-	requeueAfter := r.nextRequeueDuration(user, state)
+	requeueAfter := nextKubeConfigRequeueDuration(user, state)
 	if syncErr := r.finishKubeConfigSync(user, state); syncErr != nil {
 		return ctrl.Result{}, syncErr
 	}
@@ -1720,34 +1717,27 @@ func (r *UserReconciler) isNewUser(user *userv1.User) bool {
 	return true
 }
 
-func (r *UserReconciler) nextRequeueDuration(
+func nextKubeConfigRequeueDuration(
 	user *userv1.User,
 	state *userReconcileState,
 ) time.Duration {
-	duration := RandTimeDurationBetween(r.minRequeueDuration, r.maxRequeueDuration)
 	if state != nil && state.tokenExpirationDeadline != nil &&
 		!state.tokenExpirationDeadline.IsZero() {
 		refreshDuration := time.Until(state.tokenExpirationDeadline.Time) * 8 / 10
 		if refreshDuration <= 0 {
 			return time.Second
 		}
-		if refreshDuration < duration {
-			return refreshDuration
-		}
-		return duration
+		return refreshDuration
 	}
 	if user == nil || user.Status.KubeConfigRefreshAt == nil ||
 		user.Status.KubeConfigRefreshAt.IsZero() {
-		return duration
+		return 0
 	}
 	refreshDuration := time.Until(user.Status.KubeConfigRefreshAt.Time)
 	if refreshDuration <= 0 {
 		return time.Second
 	}
-	if refreshDuration < duration {
-		return refreshDuration
-	}
-	return duration
+	return refreshDuration
 }
 
 func (r *UserReconciler) licenseToUserRequests(
@@ -1767,15 +1757,4 @@ func (r *UserReconciler) licenseToUserRequests(
 		)
 	}
 	return requests
-}
-
-// RandTimeDurationBetween get a random time duration between minDuration and maxDuration
-func RandTimeDurationBetween(minDuration, maxDuration time.Duration) time.Duration {
-	if minDuration >= maxDuration {
-		return minDuration
-	}
-	minInNano := minDuration.Nanoseconds()
-	maxInNano := maxDuration.Nanoseconds()
-	randDurationInNano := rand.Int63n(maxInNano-minInNano) + minInNano
-	return time.Duration(randDurationInNano) * time.Nanosecond
 }

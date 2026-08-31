@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -64,6 +63,7 @@ func main() {
 		metricsAddr                string
 		pprofBindAddress           string
 		enableLeaderElection       bool
+		gracefulShutdownTimeout    time.Duration
 		probeAddr                  string
 		rateLimiterOptions         ratelimiter.RateLimiterOptions
 		syncPeriod                 time.Duration
@@ -102,22 +102,28 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.DurationVar(
+		&gracefulShutdownTimeout,
+		"graceful-shutdown-timeout",
+		8*time.Second,
+		"Maximum time to stop manager runnables before releasing leadership.",
+	)
+	flag.DurationVar(
 		&syncPeriod,
 		"sync-period",
-		time.Hour*24*30,
-		"SyncPeriod determines the minimum frequency at which watched resources are reconciled.",
+		0,
+		"Informer synthetic resync period. Zero disables periodic resync.",
 	)
 	flag.DurationVar(
 		&minRequeueDuration,
 		"min-requeue-duration",
 		time.Hour*24,
-		"The minimum duration between requeue options of a resource.",
+		"Retry interval for a User blocked by the license limit.",
 	)
 	flag.DurationVar(
 		&maxRequeueDuration,
 		"max-requeue-duration",
 		time.Hour*24*2,
-		"The maximum duration between requeue options of a resource.",
+		"Deprecated: retained for compatibility and ignored.",
 	)
 	flag.DurationVar(
 		&operationReqExpirationTime,
@@ -230,23 +236,14 @@ func main() {
 		// WebhookServer: webhook.NewServer(webhook.Options{
 		//	Port: 9443,
 		// }),
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "785548a1.sealos.io",
+		HealthProbeBindAddress:        probeAddr,
+		LeaderElection:                enableLeaderElection,
+		LeaderElectionID:              "785548a1.sealos.io",
+		LeaderElectionReleaseOnCancel: true,
+		GracefulShutdownTimeout:       &gracefulShutdownTimeout,
 		Controller: config.Controller{
 			UsePriorityQueue: ptr.To(true),
 		},
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -327,10 +324,8 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
 	setupLog.Info("starting manager")
-	if err = mgr.Start(ctx); err != nil {
+	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "failed to running manager")
 		os.Exit(1)
 	}

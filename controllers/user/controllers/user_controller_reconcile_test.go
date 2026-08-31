@@ -474,7 +474,6 @@ func TestReconcileSkipsHealthyCachedUserResources(t *testing.T) {
 	r := &UserReconciler{
 		cache:              healthyStartupCache{},
 		minRequeueDuration: time.Minute,
-		maxRequeueDuration: time.Minute,
 	}
 
 	if _, err := r.reconcile(context.Background(), user); err != nil {
@@ -503,7 +502,6 @@ func TestReconcileSkipsHealthyStatusWithoutLegacyConditions(t *testing.T) {
 	r := &UserReconciler{
 		cache:              healthyStartupCache{},
 		minRequeueDuration: time.Minute,
-		maxRequeueDuration: time.Minute,
 	}
 	if _, err := r.reconcile(context.Background(), user); err != nil {
 		t.Fatalf("reconcile healthy legacy user: %v", err)
