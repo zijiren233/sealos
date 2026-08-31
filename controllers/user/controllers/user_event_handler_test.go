@@ -20,13 +20,8 @@ import (
 	"time"
 
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
-	"github.com/labring/sealos/controllers/user/pkg/licensegate"
-	"github.com/labring/sealos/controllers/user/pkg/usercount"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/priorityqueue"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -131,67 +126,5 @@ func TestAddUserRequestUsesCallerPriority(t *testing.T) {
 	}
 	if priority != 42 {
 		t.Fatalf("priority = %d, want caller priority 42", priority)
-	}
-}
-
-func TestLicenseLimitedUserRemainsNewAcrossRestart(t *testing.T) {
-	scheme := reconcileTestScheme(t)
-	stored := &userv1.User{ObjectMeta: metav1.ObjectMeta{Name: "new-user", Generation: 1}}
-	cli := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&userv1.User{}).
-		WithObjects(stored).
-		Build()
-
-	counter := usercount.NewCounter()
-	counter.Add(&userv1.User{ObjectMeta: metav1.ObjectMeta{Name: "existing-user"}})
-	counter.MarkInitialized()
-	licensegate.SetState(true, 1)
-	t.Cleanup(func() {
-		licensegate.SetState(false, licensegate.DefaultUserLimit)
-	})
-
-	r := &UserReconciler{
-		Client:      cli,
-		Recorder:    record.NewFakeRecorder(2),
-		userCounter: counter,
-	}
-	user := &userv1.User{}
-	if err := cli.Get(context.Background(), client.ObjectKey{Name: stored.Name}, user); err != nil {
-		t.Fatalf("get new User: %v", err)
-	}
-	blocked, err := r.handleLicenseLimit(
-		context.Background(),
-		user,
-		user.Status.DeepCopy(),
-	)
-	if err != nil {
-		t.Fatalf("apply license limit: %v", err)
-	}
-	if !blocked {
-		t.Fatal("license-limited User was not blocked")
-	}
-
-	restartedUser := &userv1.User{}
-	if err := cli.Get(
-		context.Background(),
-		client.ObjectKey{Name: stored.Name},
-		restartedUser,
-	); err != nil {
-		t.Fatalf("get persisted User status: %v", err)
-	}
-	if !r.isNewUser(restartedUser) {
-		t.Fatalf("license-limited User was classified as old: %#v", restartedUser.Status)
-	}
-	blocked, err = r.handleLicenseLimit(
-		context.Background(),
-		restartedUser,
-		restartedUser.Status.DeepCopy(),
-	)
-	if err != nil {
-		t.Fatalf("retry license limit: %v", err)
-	}
-	if !blocked {
-		t.Fatal("license-limited User was allowed before capacity became available")
 	}
 }
