@@ -42,7 +42,7 @@ type UserSpec struct {
 	// validity duration so a client must check the issued credential to determine
 	// the actual duration.
 	//
-	// The minimum valid value for expirationSeconds is 1_000_000_000 seconds.
+	// The minimum effective value for expirationSeconds is 1_000_000_000 seconds.
 	//
 	// +optional
 	//+kubebuilder:default:=1000000000

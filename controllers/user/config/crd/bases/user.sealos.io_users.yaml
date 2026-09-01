@@ -72,7 +72,7 @@ spec:
                   the actual duration.
 
 
-                  The minimum valid value for expirationSeconds is 1_000_000_000 seconds.
+                  The minimum effective value for expirationSeconds is 1_000_000_000 seconds.
                 format: int32
                 type: integer
               kubeConfigRotateAt:
