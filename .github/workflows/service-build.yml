@@ -87,7 +87,23 @@ jobs:
         working-directory: service/account
         env:
           TESTCONTAINERS_REQUIRED: "true"
-        run: go test ./dao -run '^TestGet(Workspace)?ConsumptionAmountWithMongoRuntime$' -count=1 -v
+        run: go test -race ./dao -run '^TestGet(Workspace)?ConsumptionAmountWithMongoRuntime$' -count=1 -v
+
+  unit-test:
+    name: Test ${{ inputs.module }} with race detector
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Golang with cache
+        uses: magnetikonline/action-golang-cache@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run Tests with race detector
+        working-directory: service/${{ inputs.module }}
+        run: go test -race ./... -count=1 -v
 
   image-build:
     strategy:

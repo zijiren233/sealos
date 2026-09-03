@@ -27,6 +27,9 @@ const (
 
 func newWorkspaceConsumptionMongo(tb testing.TB) (*MongoDB, context.Context) {
 	tb.Helper()
+	if os.Getenv(workspaceConsumptionRequiredEnv) != "true" {
+		tb.Skipf("set %s=true to run the MongoDB runtime tests", workspaceConsumptionRequiredEnv)
+	}
 	skipIfWorkspaceConsumptionDockerIsNotHealthy(tb)
 
 	ctx := context.Background()

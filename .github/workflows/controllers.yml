@@ -60,7 +60,7 @@ on:
       - "!**/*.yaml"
 
 env:
-  GO_VERSION: "1.24"
+  GO_VERSION: "1.25"
   DEFAULT_OWNER: "labring"
   LICENSE_KEY: ${{ secrets.LICENSE_KEY }}
 
@@ -74,6 +74,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  shared-unit-test:
+    name: Test shared controller packages with race detector
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Golang with cache
+        uses: magnetikonline/action-golang-cache@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install Dependencies
+        run: sudo apt update && sudo apt install -y libgpgme-dev libbtrfs-dev libdevmapper-dev
+
+      - name: Run Tests with race detector
+        working-directory: controllers/pkg
+        run: go test -race ./... -count=1 -v
+
   detect-changes:
     uses: ./.github/workflows/detect-changes.yml
     with:

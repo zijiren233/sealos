@@ -44,6 +44,14 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: test
+test: fmt vet ## Run tests.
+	go test -race ./... -coverprofile cover.out -covermode=atomic
+
+.PHONY: test-ci
+test-ci: ## Run tests in CI.
+	go test -race ./... -count=1 -coverprofile cover.out -covermode=atomic
+
 ##@ Build
 
 .PHONY: build

@@ -2585,80 +2585,6 @@ func NewAccountInterface(
 	return account, nil
 }
 
-func newAccountForTest(mongoURI, globalCockRoachURI, localCockRoachURI string) (Interface, error) {
-	account := &Account{}
-	if mongoURI != "" {
-		client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(mongoURI))
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect mongodb: %w", err)
-		}
-		if err = client.Ping(context.Background(), nil); err != nil {
-			return nil, fmt.Errorf("failed to ping mongodb: %w", err)
-		}
-		account.MongoDB = &MongoDB{
-			Client:            client,
-			AccountDBName:     "sealos-resources",
-			BillingConn:       "billing",
-			ActiveBillingConn: "active-billing",
-			PropertiesConn:    "properties",
-		}
-	} else {
-		fmt.Printf("mongoURI is empty, skip connecting to mongodb\n")
-	}
-	if globalCockRoachURI != "" && localCockRoachURI != "" {
-		ck, err := cockroach.NewCockRoach(globalCockRoachURI, localCockRoachURI)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect cockroach: %w", err)
-		}
-		if err = ck.InitTables(); err != nil {
-			return nil, fmt.Errorf("failed to init tables: %w", err)
-		}
-		account.Cockroach = &Cockroach{ck: ck}
-	} else {
-		fmt.Printf(
-			"globalCockRoachURI or localCockRoachURI is empty, skip connecting to cockroach\n",
-		)
-	}
-	return account, nil
-}
-
-func NewAccountForTest(mongoURI, globalCockRoachURI, localCockRoachURI string) (Interface, error) {
-	account := &Account{}
-	if mongoURI != "" {
-		client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(mongoURI))
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect mongodb: %w", err)
-		}
-		if err = client.Ping(context.Background(), nil); err != nil {
-			return nil, fmt.Errorf("failed to ping mongodb: %w", err)
-		}
-		account.MongoDB = &MongoDB{
-			Client:            client,
-			AccountDBName:     "sealos-resources",
-			BillingConn:       "billing",
-			ActiveBillingConn: "active-billing",
-			PropertiesConn:    "properties",
-		}
-	} else {
-		fmt.Printf("mongoURI is empty, skip connecting to mongodb\n")
-	}
-	if globalCockRoachURI != "" && localCockRoachURI != "" {
-		ck, err := cockroach.NewCockRoach(globalCockRoachURI, localCockRoachURI)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect cockroach: %w", err)
-		}
-		// if err = ck.InitTables(); err != nil {
-		//	return nil, fmt.Errorf("failed to init tables: %v", err)
-		//}
-		account.Cockroach = &Cockroach{ck: ck}
-	} else {
-		fmt.Printf(
-			"globalCockRoachURI or localCockRoachURI is empty, skip connecting to cockroach\n",
-		)
-	}
-	return account, nil
-}
-
 func (m *MongoDB) getProperties() (*resources.PropertyTypeLS, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -2811,7 +2737,8 @@ func (m *Account) ApplyInvoice(
 				return fmt.Errorf("failed to create invoice payments: %w", err)
 			}
 			return nil
-		}); err != nil {
+		},
+	); err != nil {
 		err = fmt.Errorf("failed to apply invoice: %w", err)
 		return invoice, payments, err
 	}

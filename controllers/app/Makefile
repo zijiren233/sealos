@@ -63,8 +63,12 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+test: manifests generate fmt vet ## Run tests.
+	go test -race ./... -coverprofile cover.out -covermode=atomic
+
+.PHONY: test-ci
+test-ci: ## Run tests in CI without regenerating source and manifests.
+	go test -race ./... -count=1 -coverprofile cover.out -covermode=atomic
 
 ##@ Build
 
