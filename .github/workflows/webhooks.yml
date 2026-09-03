@@ -125,7 +125,7 @@ jobs:
 
       - name: Run Tests with race detector
         working-directory: ${{ matrix.workdir }}
-        run: make test-ci
+        run: make test
 
   image-build:
     runs-on: ubuntu-24.04

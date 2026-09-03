@@ -60,11 +60,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet ## Run tests.
-	go test -race $$(go list ./... | grep -v /e2e) -coverprofile cover.out -covermode=atomic
-
-.PHONY: test-ci
-test-ci: ## Run tests in CI without regenerating source and manifests.
+test: ## Run tests.
 	go test -race $$(go list ./... | grep -v /e2e) -count=1 -coverprofile cover.out -covermode=atomic
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.

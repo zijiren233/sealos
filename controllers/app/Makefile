@@ -63,11 +63,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet ## Run tests.
-	go test -race ./... -coverprofile cover.out -covermode=atomic
-
-.PHONY: test-ci
-test-ci: ## Run tests in CI without regenerating source and manifests.
+test: ## Run tests.
 	go test -race ./... -count=1 -coverprofile cover.out -covermode=atomic
 
 ##@ Build

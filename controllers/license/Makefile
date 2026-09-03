@@ -59,13 +59,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet ## Run tests.
-	@LD_FLAGS=""; \
-	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS="-X ${CONTROLLER_PKG}.encryptionKey=${LICENSE_KEY}"; \
-	go test -race -ldflags "$${LD_FLAGS}" ./... -coverprofile cover.out -covermode=atomic
-
-.PHONY: test-ci
-test-ci: ## Run tests in CI without regenerating source and manifests.
+test: ## Run tests.
 	@LD_FLAGS=""; \
 	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS="-X ${CONTROLLER_PKG}.encryptionKey=${LICENSE_KEY}"; \
 	go test -race -ldflags "$${LD_FLAGS}" ./... -count=1 -coverprofile cover.out -covermode=atomic
