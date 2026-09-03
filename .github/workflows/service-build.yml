@@ -83,8 +83,6 @@ jobs:
 
       - name: Run Tests with race detector
         working-directory: service/${{ inputs.module }}
-        env:
-          TESTCONTAINERS_REQUIRED: ${{ inputs.module == 'account' && 'true' || 'false' }}
         run: go test -race ./... -count=1 -v
 
   image-build:
