@@ -57,7 +57,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: ## Run tests.
-	go test -race ./... -count=1 -coverprofile cover.out -covermode=atomic
+	go test -race ./... -count=1
 
 ##@ Build
 

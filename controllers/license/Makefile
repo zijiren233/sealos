@@ -62,7 +62,7 @@ vet: ## Run go vet against code.
 test: ## Run tests.
 	@LD_FLAGS=""; \
 	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS="-X ${CONTROLLER_PKG}.encryptionKey=${LICENSE_KEY}"; \
-	go test -race -ldflags "$${LD_FLAGS}" ./... -count=1 -coverprofile cover.out -covermode=atomic
+	go test -race -ldflags "$${LD_FLAGS}" ./... -count=1
 
 
 ##@ Build

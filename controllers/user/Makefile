@@ -64,7 +64,7 @@ vet: ## Run go vet against code.
 test: envtest ## Run tests.
 	@LD_FLAGS=""; \
 	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS="-X ${CONTROLLER_LICENSE_PKG}.encryptionKey=${LICENSE_KEY}"; \
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -race -ldflags "$${LD_FLAGS}" ./... -count=1 -coverprofile cover.out -covermode=atomic
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -race -ldflags "$${LD_FLAGS}" ./... -count=1
 
 ##@ Build
 
