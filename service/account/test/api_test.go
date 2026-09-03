@@ -41,7 +41,7 @@ func Test_Auth(t *testing.T) {
 		t.Fatalf("failed to marshal request body: %v", err)
 	}
 
-	// #nosec G107
+	// #nosec G704 -- the operator explicitly enables and configures this external test.
 	request, err := http.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,
