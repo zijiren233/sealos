@@ -77,11 +77,6 @@ func (k *KubeadmRuntime) Renew(opts runtime.CertRenewOptions) error {
 			return err
 		}
 	}
-	if containsRenewTarget(normalizedTargets, AdminConf) {
-		if err := k.syncLocalAdminKubeConfigCopies(); err != nil {
-			return err
-		}
-	}
 	k.cli = nil
 	return nil
 }
@@ -135,9 +130,6 @@ func (k *KubeadmRuntime) renewAllLocalCertMaterials(adminOrganizations []string)
 		if err := k.ensureAdminClusterRoleBinding(); err != nil {
 			return err
 		}
-	}
-	if err := k.syncLocalAdminKubeConfigCopies(); err != nil {
-		return err
 	}
 	k.cli = nil
 	return nil
@@ -358,7 +350,7 @@ func (k *KubeadmRuntime) UpdateCertSANs(certSans []string) error {
 		k.saveNewKubeadmConfig,
 		k.uploadConfigFromKubeadm,
 		k.syncCert,
-		k.deleteAPIServer,
+		k.restartAPIServer,
 		k.showKubeadmCert,
 	}
 	for i, f := range pipeline {
@@ -448,10 +440,6 @@ func (k *KubeadmRuntime) syncCert() error {
 				return fmt.Errorf("failed to create cert for master %s: %v", master, err)
 			}
 
-			err = k.copyMasterKubeConfig(master)
-			if err != nil {
-				return err
-			}
 			logger.Info("succeeded generate cert %s as master", master)
 		}
 		return nil
@@ -463,7 +451,7 @@ func (k *KubeadmRuntime) showKubeadmCert() error {
 	return k.sshCmdAsync(k.getMaster0IPAndPort(), fmt.Sprintf("%s%s", certCheck, vlogToStr(k.klogLevel)))
 }
 
-func (k *KubeadmRuntime) deleteAPIServer() error {
-	logger.Info("delete pod apiserver from crictl")
-	return k.deleteStaticPod(kubernetes.KubeAPIServer)
+func (k *KubeadmRuntime) restartAPIServer() error {
+	logger.Info("restart apiserver containers to load updated certificates")
+	return k.restartStaticPod(kubernetes.KubeAPIServer)
 }

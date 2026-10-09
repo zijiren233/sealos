@@ -21,49 +21,25 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 )
 
+// copyKubeAdminConfigCommand keeps the long-standing convenience contract for
+// the node where the cluster is bootstrapped. Additional nodes deliberately do
+// not receive this cluster-admin credential.
 const copyKubeAdminConfigCommand = `rm -rf $HOME/.kube/config && mkdir -p $HOME/.kube && cp /etc/kubernetes/admin.conf $HOME/.kube/config`
-
-func (k *KubeadmRuntime) copyKubeConfigFileToNodes(hosts ...string) error {
-	src := k.pathResolver.AdminFile()
-	eg, _ := errgroup.WithContext(context.Background())
-	for _, node := range hosts {
-		node := node
-		eg.Go(func() error {
-			home, err := k.execer.CmdToString(node, "echo $HOME", "")
-			if err != nil {
-				return err
-			}
-			dst := filepath.Join(home, ".kube", "config")
-			return k.execer.Copy(node, src, dst)
-		})
-	}
-	return eg.Wait()
-}
 
 func (k *KubeadmRuntime) copyMasterKubeConfig(host string) error {
 	return k.sshCmdAsync(host, copyKubeAdminConfigCommand)
 }
 
-func (k *KubeadmRuntime) syncLocalAdminKubeConfigCopies() error {
-	hosts := append([]string{}, k.getMasterIPAndPortList()...)
-	hosts = append(hosts, k.getNodeIPAndPortList()...)
-	if len(hosts) == 0 {
-		return nil
-	}
-	return k.copyKubeConfigFileToNodes(hosts...)
-}
-
-func (k *KubeadmRuntime) deleteStaticPod(component string) error {
-	podIDSh := fmt.Sprintf("crictl ps -a --name %s -o json", component)
+func (k *KubeadmRuntime) restartStaticPod(component string) error {
+	containerQuery := fmt.Sprintf("crictl ps --state Running --name '^%s$' -o json", component)
 	type crictlPS struct {
 		Containers []struct {
-			ID           string `json:"id"`
-			PodSandboxID string `json:"podSandboxId"`
+			ID string `json:"id"`
 		} `json:"containers"`
 	}
 
@@ -71,23 +47,33 @@ func (k *KubeadmRuntime) deleteStaticPod(component string) error {
 	for _, master := range k.getMasterIPAndPortList() {
 		m := master
 		eg.Go(func() error {
-			podIDJSON, err := k.sshCmdToString(m, podIDSh)
+			containersJSON, err := k.sshCmdToString(m, containerQuery)
 			if err != nil {
 				return err
 			}
 			ps := &crictlPS{}
-			if err = json.Unmarshal([]byte(podIDJSON), ps); err != nil {
+			if err = json.Unmarshal([]byte(containersJSON), ps); err != nil {
 				return err
 			}
 			if len(ps.Containers) == 0 {
 				return errors.New("not found static pod running")
 			}
 
-			podID := ps.Containers[0].PodSandboxID[:13]
-			if err = k.sshCmdAsync(m, fmt.Sprintf("crictl --timeout=10s stopp %s", podID)); err != nil {
-				return err
+			// Kubelet restarts stopped containers and loads the updated certificates.
+			// Removing the sandbox races with containers that kubelet is starting.
+			for _, container := range ps.Containers {
+				if container.ID == "" {
+					return errors.New("static pod container has an empty ID")
+				}
+				containerID := "'" + strings.ReplaceAll(container.ID, "'", "'\\''") + "'"
+				if err = k.sshCmdAsync(
+					m,
+					"crictl --timeout=30s stop --timeout=10 "+containerID,
+				); err != nil {
+					return err
+				}
 			}
-			return k.sshCmdAsync(m, fmt.Sprintf("crictl rmp %s", podID))
+			return nil
 		})
 	}
 	return eg.Wait()
