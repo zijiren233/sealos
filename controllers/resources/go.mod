@@ -1,6 +1,6 @@
 module github.com/labring/sealos/controllers/resources
 
-go 1.24.0
+go 1.25.0
 
 replace (
 	k8s.io/api => k8s.io/api v0.32.3
@@ -19,7 +19,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.64
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.36.1
-	golang.org/x/sync v0.8.0
+	golang.org/x/sync v0.20.0
 	k8s.io/api v0.32.1
 	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v12.0.0+incompatible
@@ -86,12 +86,12 @@ require (
 	go.mongodb.org/mongo-driver v1.12.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.28.0 // indirect
-	golang.org/x/net v0.30.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/term v0.25.0 // indirect
-	golang.org/x/text v0.19.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
