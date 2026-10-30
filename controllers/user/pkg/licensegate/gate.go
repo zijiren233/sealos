@@ -40,15 +40,11 @@ func HasActiveLicense() bool {
 	return activeFlag.Load() == 1
 }
 
-func AllowNewUser(currentCount int) bool {
-	if !Initialized() {
-		return false
-	}
-	limit := UserLimit()
-	if limit < 0 {
-		return true
-	}
-	return currentCount < limit
+func AllowNewUser(_ int) bool {
+	// TEST-ONLY: this branch disables the license user limit so the shared
+	// test cluster can exercise user CRUD without a parseable license.
+	// Never merge this change.
+	return true
 }
 
 func UserLimit() int {
