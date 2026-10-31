@@ -200,8 +200,10 @@ func TestLicenseLimitedUserRemainsNewAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply license limit: %v", err)
 	}
-	if !blocked {
-		t.Fatal("license-limited User was not blocked")
+	// TEST-ONLY branch: AllowNewUser is patched to always return true, so a
+	// license-limited cluster must let the user through.
+	if blocked {
+		t.Fatal("license-limited User was blocked despite the test-only AllowNewUser bypass")
 	}
 
 	restartedUser := &userv1.User{}
@@ -223,7 +225,7 @@ func TestLicenseLimitedUserRemainsNewAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retry license limit: %v", err)
 	}
-	if !blocked {
-		t.Fatal("license-limited User was allowed before capacity became available")
+	if blocked {
+		t.Fatal("license-limited User was blocked on retry despite the test-only AllowNewUser bypass")
 	}
 }
